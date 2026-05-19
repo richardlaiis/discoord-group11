@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/room.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="app-container">
+    
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar glass-panel">
+        <div class="sidebar-header">
+            <h1>Discoord</h1>
+            <button class="icon-btn" title="Add Room"><span class="material-symbols-outlined">add</span></button>
+        </div>
+        
+        <div class="user-list">
+            <!-- Room / Server Info -->
+            <div style="padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--border-color); margin-bottom: var(--spacing-2);">
+                <h3 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: var(--spacing-2);">Current Room</h3>
+                <div class="user-item" style="background: rgba(255,255,255,0.05);">
+                    <div class="avatar" style="border-radius: var(--radius-md); background: var(--accent-primary);">🚀</div>
+                    <div class="user-info">
+                        <span class="user-name">Project Planning</span>
+                        <span class="user-activity">4 Online</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Online Users -->
+            <h3 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: var(--spacing-2); margin-top: var(--spacing-2);">Online — 4</h3>
+            
+            <div class="user-item">
+                <div class="avatar">
+                    🐱
+                    <div class="status-dot status-online"></div>
+                </div>
+                <div class="user-info">
+                    <span class="user-name">Richard</span>
+                    <span class="user-activity">Working on UI</span>
+                </div>
+            </div>
+            
+            <div class="user-item">
+                <div class="avatar">
+                    🐶
+                    <div class="status-dot status-idle"></div>
+                </div>
+                <div class="user-info">
+                    <span class="user-name">Alice</span>
+                    <span class="user-activity">AFK</span>
+                </div>
+            </div>
+            
+            <div class="user-item">
+                <div class="avatar">
+                    🦊
+                    <div class="status-dot status-dnd"></div>
+                </div>
+                <div class="user-info">
+                    <span class="user-name">Bob</span>
+                    <span class="user-activity">Do Not Disturb</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="user-profile-bar">
+            <div class="user-item" style="padding: 0; cursor: default; flex: 1;">
+                <div class="avatar">
+                    🐱
+                    <div class="status-dot status-online"></div>
+                </div>
+                <div class="user-info">
+                    <span class="user-name">Richard</span>
+                    <span class="user-activity" style="color: var(--success)">Online</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 4px;">
+                <button class="icon-btn"><span class="material-symbols-outlined" style="font-size: 1.2rem;">mic</span></button>
+                <button class="icon-btn"><span class="material-symbols-outlined" style="font-size: 1.2rem;">settings</span></button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- CENTER 2D SPACE -->
+    <main class="main-area">
+        <!-- Mock Avatars in 2D Space -->
+        <div class="space-avatar" style="top: 50%; left: 50%; z-index: 2;" title="Richard">🐱</div>
+        <div class="space-avatar" style="top: 30%; left: 40%; background: #0ea5e9;" title="Alice">🐶</div>
+        <div class="space-avatar" style="top: 60%; left: 70%; background: #8b5cf6;" title="Bob">🦊</div>
+        
+        <!-- Controls overlay (bottom center) -->
+        <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 30px; backdrop-filter: blur(10px); border: 1px solid var(--border-color);">
+            <button class="icon-btn" title="Emote"><span class="material-symbols-outlined">mood</span></button>
+            <button class="icon-btn active" title="Move Mode"><span class="material-symbols-outlined">pan_tool</span></button>
+            <button class="icon-btn" title="Poke"><span class="material-symbols-outlined">touch_app</span></button>
+        </div>
+    </main>
+
+    <!-- RIGHT PANEL (CHAT & BLACKBOARD) -->
+    <aside class="right-panel glass-panel">
+        <div class="panel-tabs">
+            <button class="tab-btn active" onclick="switchTab('chat')">Chat</button>
+            <button class="tab-btn" onclick="switchTab('blackboard')">Blackboard</button>
+        </div>
+
+        <div class="panel-content">
+            <!-- Chat Container -->
+            <div id="chat-tab" class="chat-container">
+                <div class="chat-messages">
+                    <div class="message">
+                        <div class="avatar" style="background: #0ea5e9;">🐶</div>
+                        <div class="message-content">
+                            <div class="message-header">
+                                <span class="message-author">Alice</span>
+                                <span class="message-time">10:42 AM</span>
+                            </div>
+                            <div class="message-text">Hey everyone! How's the UI coming along?</div>
+                        </div>
+                    </div>
+                    
+                    <div class="message">
+                        <div class="avatar">🐱</div>
+                        <div class="message-content">
+                            <div class="message-header">
+                                <span class="message-author" style="color: var(--accent-primary);">Richard</span>
+                                <span class="message-time">10:45 AM</span>
+                            </div>
+                            <div class="message-text">Working on it right now. Adding the glassmorphism effects ✨</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="chat-input-area">
+                    <div class="chat-input-wrapper">
+                        <input type="text" class="chat-input" placeholder="Message #Project Planning...">
+                        <button class="icon-btn" style="padding: 2px;"><span class="material-symbols-outlined" style="font-size: 1.2rem;">send</span></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Blackboard Container -->
+            <div id="blackboard-tab" class="blackboard-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
+                    <h3 style="font-size: 0.9rem; font-weight: 600;">Shared Blackboard</h3>
+                    <button class="icon-btn" style="padding: 4px;"><span class="material-symbols-outlined">filter_list</span></button>
+                </div>
+                
+                <div class="sticky-note">
+                    <div class="sticky-note-header">📌 Pinned by Alice</div>
+                    <div class="sticky-note-content">
+                        Remember to test the WebSocket connection for real-time avatar movement!
+                    </div>
+                </div>
+                
+                <div class="sticky-note" style="background: linear-gradient(135deg, #a7f3d0, #6ee7b7); transform: rotate(2deg);">
+                    <div class="sticky-note-header">To-Do</div>
+                    <div class="sticky-note-content">
+                        - Setup Django Channels<br>
+                        - Configure Redis<br>
+                        - Write HTMX endpoints
+                    </div>
+                </div>
+                
+                <button class="add-note-btn">
+                    <span class="material-symbols-outlined">add_box</span>
+                    Add Note
+                </button>
+            </div>
+        </div>
+    </aside>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function switchTab(tabName) {
+        // Update buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+        
+        // Update content
+        document.getElementById('chat-tab').classList.remove('active');
+        document.getElementById('blackboard-tab').classList.remove('active');
+        
+        if (tabName === 'chat') {
+            document.getElementById('chat-tab').style.display = 'flex';
+            document.getElementById('blackboard-tab').style.display = 'none';
+        } else {
+            document.getElementById('chat-tab').style.display = 'none';
+            document.getElementById('blackboard-tab').style.display = 'block';
+        }
+    }
+    
+    // Default setup
+    document.getElementById('blackboard-tab').style.display = 'none';
+</script>
+{% endblock %}
