@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/auth.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card glass">
+        <h1 class="auth-title">Create account</h1>
+        <p class="auth-subtitle">Join the Discoord space</p>
+
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="form-error">{{ form.non_field_errors }}</div>
+            {% endif %}
+
+            <label class="form-field">
+                <span>Username</span>
+                {{ form.username }}
+                {{ form.username.errors }}
+            </label>
+
+            <label class="form-field">
+                <span>Password</span>
+                {{ form.password1 }}
+                {{ form.password1.errors }}
+            </label>
+
+            <label class="form-field">
+                <span>Confirm password</span>
+                {{ form.password2 }}
+                {{ form.password2.errors }}
+            </label>
+
+            <button type="submit" class="auth-btn">Create account</button>
+        </form>
+
+        <p class="auth-footer">
+            Already have an account? <a href="{% url 'login' %}">Log in</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

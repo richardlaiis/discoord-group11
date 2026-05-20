@@ -72,13 +72,19 @@
                     <div class="status-dot status-online"></div>
                 </div>
                 <div class="user-info">
-                    <span class="user-name">Richard</span>
+                    <span class="user-name">{{ request.user.username }}</span>
                     <span class="user-activity" style="color: var(--success)">Online</span>
                 </div>
             </div>
-            <div style="display: flex; gap: 4px;">
+            <div style="display: flex; gap: 4px; align-items: center;">
                 <button class="icon-btn"><span class="material-symbols-outlined" style="font-size: 1.2rem;">mic</span></button>
                 <button class="icon-btn"><span class="material-symbols-outlined" style="font-size: 1.2rem;">settings</span></button>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button class="icon-btn" title="Log out">
+                        <span class="material-symbols-outlined" style="font-size: 1.2rem;">logout</span>
+                    </button>
+                </form>
             </div>
         </div>
     </aside>
