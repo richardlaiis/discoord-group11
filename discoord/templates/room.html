@@ -7,68 +7,88 @@
 
 {% block content %}
 <div class="app-container">
-    
-    <!-- LEFT SIDEBAR -->
     <aside class="sidebar glass-panel">
         <div class="sidebar-header">
             <h1>Discoord</h1>
-            <button class="icon-btn" title="Add Room"><span class="material-symbols-outlined">add</span></button>
+            <span class="presence-pill {% if active_group %}online{% endif %}">{% if active_group %}Live{% else %}Idle{% endif %}</span>
         </div>
-        
-        <div class="user-list">
-            <!-- Room / Server Info -->
-            <div style="padding-bottom: var(--spacing-2); border-bottom: 1px solid var(--border-color); margin-bottom: var(--spacing-2);">
-                <h3 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: var(--spacing-2);">Current Room</h3>
-                <div class="user-item" style="background: rgba(255,255,255,0.05);">
-                    <div class="avatar" style="border-radius: var(--radius-md); background: var(--accent-primary);">🚀</div>
+
+        {% if messages %}
+        <div class="flash-stack">
+            {% for message in messages %}
+            <div class="flash-message flash-{{ message.tags|default:'info' }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="sidebar-section">
+            <h3>Groups</h3>
+            <div class="group-tools">
+                <form class="group-form" method="post" action="{% url 'create_group' %}">
+                    {% csrf_token %}
+                    {{ create_group_form.name }}
+                    <button class="icon-btn" type="submit" title="Create group">
+                        <span class="material-symbols-outlined">add</span>
+                    </button>
+                </form>
+                <form class="group-form" method="post" action="{% url 'join_group' %}">
+                    {% csrf_token %}
+                    {{ join_group_form.invite_code }}
+                    <button class="icon-btn" type="submit" title="Join group">
+                        <span class="material-symbols-outlined">login</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="sidebar-section sidebar-scroll-area">
+            <h3>Joined</h3>
+            <div class="group-list">
+                {% for group in groups %}
+                <a class="group-link {% if active_group and group.pk == active_group.pk %}active{% endif %}" href="{% url 'room_group' group.slug %}">
+                    <div class="user-item">
+                        <div class="avatar" style="border-radius: var(--radius-md); background: var(--accent-primary);">#</div>
+                        <div class="user-info">
+                            <span class="user-name">{{ group.name }}</span>
+                            <span class="user-activity">{{ group.members.all|length }} people</span>
+                            {% if active_group and group.pk == active_group.pk %}
+                            <div class="group-meta">
+                                <span class="group-code">Active</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% empty %}
+                <div class="empty-state">No groups yet. Create or join one above.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="sidebar-section sidebar-scroll-area">
+            <h3>Members</h3>
+            <div class="group-list">
+                {% for member in members %}
+                <div class="user-item member-row" data-user-id="{{ member.id }}" data-online="{% if member.id in online_member_ids %}true{% else %}false{% endif %}">
+                    <div class="avatar">
+                        {{ member.username|first|upper }}
+                        <div class="status-dot {% if member.id in online_member_ids %}status-online{% else %}status-idle{% endif %}"></div>
+                    </div>
                     <div class="user-info">
-                        <span class="user-name">Project Planning</span>
-                        <span class="user-activity">4 Online</span>
+                        <span class="user-name">{{ member.username }}</span>
+                        <span class="presence-pill {% if member.id in online_member_ids %}online{% endif %}">{% if member.id in online_member_ids %}Online{% else %}Offline{% endif %}</span>
                     </div>
                 </div>
-            </div>
-
-            <!-- Online Users -->
-            <h3 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: var(--spacing-2); margin-top: var(--spacing-2);">Online — 4</h3>
-            
-            <div class="user-item">
-                <div class="avatar">
-                    🐱
-                    <div class="status-dot status-online"></div>
-                </div>
-                <div class="user-info">
-                    <span class="user-name">Richard</span>
-                    <span class="user-activity">Working on UI</span>
-                </div>
-            </div>
-            
-            <div class="user-item">
-                <div class="avatar">
-                    🐶
-                    <div class="status-dot status-idle"></div>
-                </div>
-                <div class="user-info">
-                    <span class="user-name">Alice</span>
-                    <span class="user-activity">AFK</span>
-                </div>
-            </div>
-            
-            <div class="user-item">
-                <div class="avatar">
-                    🦊
-                    <div class="status-dot status-dnd"></div>
-                </div>
-                <div class="user-info">
-                    <span class="user-name">Bob</span>
-                    <span class="user-activity">Do Not Disturb</span>
-                </div>
+                {% empty %}
+                <div class="empty-state">No members yet.</div>
+                {% endfor %}
             </div>
         </div>
 
         <div class="user-profile-bar">
             <div class="user-item" style="padding: 0; cursor: default; flex: 1;">
                 <div class="avatar">
-                    🐱
+                    {{ request.user.username|first|upper }}
                     <div class="status-dot status-online"></div>
                 </div>
                 <div class="user-info">
@@ -77,11 +97,11 @@
                 </div>
             </div>
             <div style="display: flex; gap: 4px; align-items: center;">
-                <button class="icon-btn"><span class="material-symbols-outlined" style="font-size: 1.2rem;">mic</span></button>
-                <button class="icon-btn"><span class="material-symbols-outlined" style="font-size: 1.2rem;">settings</span></button>
+                <button class="icon-btn" type="button"><span class="material-symbols-outlined" style="font-size: 1.2rem;">mic</span></button>
+                <button class="icon-btn" type="button"><span class="material-symbols-outlined" style="font-size: 1.2rem;">settings</span></button>
                 <form method="post" action="{% url 'logout' %}">
                     {% csrf_token %}
-                    <button class="icon-btn" title="Log out">
+                    <button class="icon-btn" type="submit" title="Log out">
                         <span class="material-symbols-outlined" style="font-size: 1.2rem;">logout</span>
                     </button>
                 </form>
@@ -89,118 +109,271 @@
         </div>
     </aside>
 
-    <!-- CENTER 2D SPACE -->
     <main class="main-area">
-        <!-- Mock Avatars in 2D Space -->
-        <div class="space-avatar" style="top: 50%; left: 50%; z-index: 2;" title="Richard">🐱</div>
-        <div class="space-avatar" style="top: 30%; left: 40%; background: #0ea5e9;" title="Alice">🐶</div>
-        <div class="space-avatar" style="top: 60%; left: 70%; background: #8b5cf6;" title="Bob">🦊</div>
-        
-        <!-- Controls overlay (bottom center) -->
+        {% if members %}
+            {% for member in members %}
+            <div class="space-avatar member-avatar" style="top: {{ forloop.counter0|add:25 }}%; left: {{ forloop.counter0|add:35 }}%;" title="{{ member.username }}">
+                {{ member.username|first|upper }}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">No members yet.</div>
+        {% endif %}
+
+        <div class="main-room-summary">
+            <div>
+                <div class="summary-title">{{ active_group.name|default:"No active group" }}</div>
+            </div>
+            <div class="summary-chip">{% if active_group %}Code {{ active_group.invite_code }}{% else %}No code{% endif %}</div>
+            <div id="room-online-count" class="summary-chip">{{ online_member_ids|length }} online</div>
+        </div>
+
         <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 30px; backdrop-filter: blur(10px); border: 1px solid var(--border-color);">
-            <button class="icon-btn" title="Emote"><span class="material-symbols-outlined">mood</span></button>
-            <button class="icon-btn active" title="Move Mode"><span class="material-symbols-outlined">pan_tool</span></button>
-            <button class="icon-btn" title="Poke"><span class="material-symbols-outlined">touch_app</span></button>
+            <button class="icon-btn" type="button" title="Emote"><span class="material-symbols-outlined">mood</span></button>
+            <button class="icon-btn active" type="button" title="Move Mode"><span class="material-symbols-outlined">pan_tool</span></button>
+            <button class="icon-btn" type="button" title="Poke"><span class="material-symbols-outlined">touch_app</span></button>
         </div>
     </main>
 
-    <!-- RIGHT PANEL (CHAT & BLACKBOARD) -->
     <aside class="right-panel glass-panel">
         <div class="panel-tabs">
-            <button class="tab-btn active" onclick="switchTab('chat')">Chat</button>
-            <button class="tab-btn" onclick="switchTab('blackboard')">Blackboard</button>
+            <button class="tab-btn active" type="button" onclick="switchTab(event, 'chat')">Chat</button>
+            <button class="tab-btn" type="button" onclick="switchTab(event, 'blackboard')">Blackboard</button>
         </div>
 
         <div class="panel-content">
-            <!-- Chat Container -->
             <div id="chat-tab" class="chat-container">
                 <div class="chat-messages">
-                    <div class="message">
-                        <div class="avatar" style="background: #0ea5e9;">🐶</div>
-                        <div class="message-content">
-                            <div class="message-header">
-                                <span class="message-author">Alice</span>
-                                <span class="message-time">10:42 AM</span>
-                            </div>
-                            <div class="message-text">Hey everyone! How's the UI coming along?</div>
-                        </div>
-                    </div>
-                    
-                    <div class="message">
-                        <div class="avatar">🐱</div>
-                        <div class="message-content">
-                            <div class="message-header">
-                                <span class="message-author" style="color: var(--accent-primary);">Richard</span>
-                                <span class="message-time">10:45 AM</span>
-                            </div>
-                            <div class="message-text">Working on it right now. Adding the glassmorphism effects ✨</div>
-                        </div>
+                    <div
+                        id="message-list"
+                        {% if active_group %}
+                        hx-get="{% url 'group_messages_fragment' active_group.slug %}"
+                        hx-trigger="load, every 10s"
+                        hx-target="#message-list"
+                        hx-swap="innerHTML"
+                        {% endif %}
+                    >
+                        {% include 'partials/chat_messages.html' %}
                     </div>
                 </div>
-                
+
                 <div class="chat-input-area">
-                    <div class="chat-input-wrapper">
-                        <input type="text" class="chat-input" placeholder="Message #Project Planning...">
-                        <button class="icon-btn" style="padding: 2px;"><span class="material-symbols-outlined" style="font-size: 1.2rem;">send</span></button>
-                    </div>
+                    {% if active_group %}
+                    <form class="chat-input-form" id="chat-form" method="post" action="{% url 'send_message' active_group.slug %}">
+                        {% csrf_token %}
+                        <div class="chat-input-wrapper">
+                            <input type="text" class="chat-input" id="chat-input" placeholder="Message..." maxlength="1000" autocomplete="off">
+                            <button class="icon-btn" type="submit" style="padding: 2px;"><span class="material-symbols-outlined" style="font-size: 1.2rem;">send</span></button>
+                        </div>
+                    </form>
+                    {% else %}
+                    <div class="empty-state">Join a group before sending messages.</div>
+                    {% endif %}
                 </div>
             </div>
 
-            <!-- Blackboard Container -->
             <div id="blackboard-tab" class="blackboard-container">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
-                    <h3 style="font-size: 0.9rem; font-weight: 600;">Shared Blackboard</h3>
-                    <button class="icon-btn" style="padding: 4px;"><span class="material-symbols-outlined">filter_list</span></button>
+                    <h3 style="font-size: 0.9rem; font-weight: 600;">Notes</h3>
+                    <button class="icon-btn" type="button" style="padding: 4px;"><span class="material-symbols-outlined">filter_list</span></button>
                 </div>
-                
+
                 <div class="sticky-note">
                     <div class="sticky-note-header">📌 Pinned by Alice</div>
                     <div class="sticky-note-content">
-                        Remember to test the WebSocket connection for real-time avatar movement!
+                        Keep notes short and clear.
                     </div>
                 </div>
-                
+
                 <div class="sticky-note" style="background: linear-gradient(135deg, #a7f3d0, #6ee7b7); transform: rotate(2deg);">
                     <div class="sticky-note-header">To-Do</div>
                     <div class="sticky-note-content">
-                        - Setup Django Channels<br>
-                        - Configure Redis<br>
-                        - Write HTMX endpoints
+                        - Chat<br>
+                        - Presence<br>
+                        - Notes
                     </div>
                 </div>
-                
-                <button class="add-note-btn">
+
+                <button class="add-note-btn" type="button">
                     <span class="material-symbols-outlined">add_box</span>
                     Add Note
                 </button>
             </div>
         </div>
     </aside>
-
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    function switchTab(tabName) {
-        // Update buttons
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
-        
-        // Update content
-        document.getElementById('chat-tab').classList.remove('active');
-        document.getElementById('blackboard-tab').classList.remove('active');
-        
+    const activeGroupSlug = {% if active_group %}'{{ active_group.slug|escapejs }}'{% else %}null{% endif %};
+    const currentUserId = {{ request.user.id }};
+
+    function switchTab(event, tabName) {
+        document.querySelectorAll('.tab-btn').forEach((btn) => btn.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+
+        const chatTab = document.getElementById('chat-tab');
+        const blackboardTab = document.getElementById('blackboard-tab');
         if (tabName === 'chat') {
-            document.getElementById('chat-tab').style.display = 'flex';
-            document.getElementById('blackboard-tab').style.display = 'none';
-        } else {
-            document.getElementById('chat-tab').style.display = 'none';
-            document.getElementById('blackboard-tab').style.display = 'block';
+            chatTab.style.display = 'flex';
+            blackboardTab.style.display = 'none';
+            return;
+        }
+
+        chatTab.style.display = 'none';
+        blackboardTab.style.display = 'block';
+    }
+
+    function formatTime(isoString) {
+        return new Intl.DateTimeFormat('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Taipei',
+        }).format(new Date(isoString));
+    }
+
+    function appendMessage(message) {
+        const messageList = document.getElementById('message-list');
+        const emptyState = document.getElementById('message-empty');
+        if (emptyState) {
+            emptyState.remove();
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message';
+        wrapper.dataset.messageId = message.id;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = message.sender.charAt(0).toUpperCase();
+
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+
+        const header = document.createElement('div');
+        header.className = 'message-header';
+
+        const author = document.createElement('span');
+        author.className = 'message-author';
+        if (message.is_me || message.sender_id === currentUserId) {
+            author.style.color = 'var(--accent-primary)';
+        }
+        author.textContent = message.sender;
+
+        const time = document.createElement('span');
+        time.className = 'message-time';
+        time.textContent = formatTime(message.created_at);
+
+        const text = document.createElement('div');
+        text.className = 'message-text';
+        text.textContent = message.content;
+
+        header.appendChild(author);
+        header.appendChild(time);
+        messageContent.appendChild(header);
+        messageContent.appendChild(text);
+        wrapper.appendChild(avatar);
+        wrapper.appendChild(messageContent);
+        messageList.appendChild(wrapper);
+        messageList.closest('.chat-messages').scrollTop = messageList.closest('.chat-messages').scrollHeight;
+    }
+
+    function updatePresence(onlineMemberIds) {
+        const onlineIds = new Set(onlineMemberIds);
+        document.querySelectorAll('.member-row').forEach((row) => {
+            const userId = Number(row.dataset.userId);
+            const isOnline = onlineIds.has(userId);
+            row.dataset.online = String(isOnline);
+            const pill = row.querySelector('.presence-pill');
+            if (pill) {
+                pill.textContent = isOnline ? 'Online' : 'Offline';
+                pill.classList.toggle('online', isOnline);
+            }
+        });
+
+        const roomOnlineCount = document.getElementById('room-online-count');
+        if (roomOnlineCount) {
+            roomOnlineCount.textContent = `${onlineIds.size} online`;
         }
     }
-    
-    // Default setup
+
+    const socket = activeGroupSlug ? new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/chat/${activeGroupSlug}/`) : null;
+
+    function getCsrfToken() {
+        const field = document.querySelector('#chat-form input[name="csrfmiddlewaretoken"]');
+        return field ? field.value : '';
+    }
+
+    if (socket) {
+        socket.addEventListener('message', (event) => {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'message') {
+                appendMessage(payload.message);
+            } else if (payload.type === 'presence') {
+                updatePresence(payload.online_member_ids);
+            }
+        });
+
+        socket.addEventListener('close', () => {
+            const status = document.querySelector('.sidebar-header .presence-pill');
+            if (status) {
+                status.textContent = 'Offline';
+                status.classList.remove('online');
+            }
+        });
+
+        const form = document.getElementById('chat-form');
+        const input = document.getElementById('chat-input');
+        if (form && input) {
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const content = input.value.trim();
+                if (!content) {
+                    return;
+                }
+
+                fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': getCsrfToken(),
+                    },
+                    body: new URLSearchParams({ content }),
+                }).then(async (response) => {
+                    if (!response.ok) {
+                        throw new Error('message-send-failed');
+                    }
+                    const payload = await response.json();
+                    input.value = '';
+                    input.focus();
+                    if (!socket || socket.readyState !== WebSocket.OPEN) {
+                        appendMessage(payload.message);
+                    }
+                }).catch(() => {
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: 'message', content }));
+                        input.value = '';
+                        input.focus();
+                    }
+                });
+            });
+        }
+    }
+
     document.getElementById('blackboard-tab').style.display = 'none';
+    document.querySelectorAll('.member-row').forEach((row) => {
+        row.dataset.online = row.dataset.online || 'false';
+    });
+
+    document.body.addEventListener('htmx:afterSwap', (event) => {
+        if (event.target && event.target.id === 'message-list') {
+            const container = event.target.closest('.chat-messages');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+    });
 </script>
 {% endblock %}

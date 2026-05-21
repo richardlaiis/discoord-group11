@@ -1,0 +1,14 @@
+{% for chat_message in chat_messages %}
+<div class="message" data-message-id="{{ chat_message.id }}">
+    <div class="avatar">{{ chat_message.sender.username|first|upper }}</div>
+    <div class="message-content">
+        <div class="message-header">
+            <span class="message-author" {% if chat_message.sender_id == request.user.id %}style="color: var(--accent-primary);"{% endif %}>{{ chat_message.sender.username }}</span>
+            <span class="message-time">{{ chat_message.created_at|date:"H:i" }}</span>
+        </div>
+        <div class="message-text">{{ chat_message.content }}</div>
+    </div>
+</div>
+{% empty %}
+<div class="empty-state" id="message-empty">Start the conversation with the first message.</div>
+{% endfor %}

@@ -1,17 +1,16 @@
 :root {
-  /* Color Palette - Vibrant Dark Mode */
-  --bg-primary: #0f111a;
-  --bg-secondary: #1a1d2d;
-  --bg-tertiary: #262b42;
-  --accent-primary: #6366f1; /* Indigo */
-  --accent-secondary: #ec4899; /* Pink */
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --border-color: rgba(255, 255, 255, 0.1);
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --bg-primary: #0b0f14;
+  --bg-secondary: #131923;
+  --bg-tertiary: #1c2430;
+  --accent-primary: #4f8cff;
+  --accent-secondary: #78a6ff;
+  --text-primary: #f5f7fb;
+  --text-secondary: #a6b0be;
+  --text-muted: #7d8795;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --success: #2ecc71;
+  --danger: #ef5350;
+  --warning: #f5b042;
 
   /* Spacing & Radii */
   --radius-sm: 0.375rem;
@@ -34,7 +33,7 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Roboto', sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   height: 100vh;
@@ -43,18 +42,18 @@ body {
   display: flex;
 }
 
-/* Glassmorphism Utilities */
+/* Surfaces */
 .glass {
-  background: rgba(26, 29, 45, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(19, 25, 35, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border-color);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 .glass-panel {
-  background: rgba(26, 29, 45, 0.85);
-  backdrop-filter: blur(16px);
+  background: rgba(19, 25, 35, 0.92);
+  backdrop-filter: blur(12px);
   border-right: 1px solid var(--border-color);
   border-left: 1px solid var(--border-color);
 }
@@ -101,12 +100,12 @@ body {
   justify-content: center;
 }
 .icon-btn:hover {
-  background: var(--bg-tertiary);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
 }
 .icon-btn.active {
   background: var(--accent-primary);
-  color: white;
+  color: #fff;
 }
 
 /* Status Indicators */
