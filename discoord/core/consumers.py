@@ -2,7 +2,13 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 from .models import ChatGroup, ChatMessage
-from .presence import get_online_member_ids, mark_member_offline, mark_member_online
+from .presence import (
+    get_online_member_ids,
+    get_online_member_states,
+    mark_member_offline,
+    mark_member_online,
+    update_member_motion,
+)
 
 
 class ChatConsumer(AsyncJsonWebsocketConsumer):
@@ -24,6 +30,7 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
 
         await self.set_online()
+        await self.send_room_state()
         await self.broadcast_presence()
 
     async def disconnect(self, close_code):
@@ -33,7 +40,23 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive_json(self, content, **kwargs):
-        if content.get('type') != 'message':
+        message_type = content.get('type')
+
+        if message_type == 'move':
+            movement = await self.apply_movement(
+                content.get('dx', 0.0),
+                content.get('dy', 0.0),
+            )
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'motion.update',
+                    'member': movement,
+                },
+            )
+            return
+
+        if message_type != 'message':
             return
 
         text = (content.get('content') or '').strip()
@@ -64,7 +87,16 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({'type': 'message', 'message': event['message']})
 
     async def presence_update(self, event):
-        await self.send_json({'type': 'presence', 'online_member_ids': event['online_member_ids']})
+        await self.send_json(
+            {
+                'type': 'presence',
+                'online_member_ids': event['online_member_ids'],
+                'member_states': event.get('member_states', {}),
+            },
+        )
+
+    async def motion_update(self, event):
+        await self.send_json({'type': 'motion', 'member': event['member']})
 
     async def set_online(self):
         await database_sync_to_async(mark_member_online)(self.chat_group.slug, self.user)
@@ -74,11 +106,24 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
 
     async def broadcast_presence(self):
         online_member_ids = list(await database_sync_to_async(get_online_member_ids)(self.chat_group.slug))
+        member_states = await database_sync_to_async(get_online_member_states)(self.chat_group.slug)
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 'type': 'presence.update',
                 'online_member_ids': online_member_ids,
+                'member_states': member_states,
+            },
+        )
+
+    async def send_room_state(self):
+        online_member_ids = list(await database_sync_to_async(get_online_member_ids)(self.chat_group.slug))
+        member_states = await database_sync_to_async(get_online_member_states)(self.chat_group.slug)
+        await self.send_json(
+            {
+                'type': 'state',
+                'online_member_ids': online_member_ids,
+                'member_states': member_states,
             },
         )
 
@@ -101,3 +146,7 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             'created_at': message.created_at.isoformat(),
             'is_me': message.sender_id == user.id,
         }
+
+    @database_sync_to_async
+    def apply_movement(self, delta_x, delta_y):
+        return update_member_motion(self.chat_group.slug, self.user, delta_x, delta_y)

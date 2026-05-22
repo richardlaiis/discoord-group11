@@ -7,8 +7,13 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from .forms import ChatGroupCreateForm, ChatGroupJoinForm, RegistrationForm
-from .models import ChatGroup, ChatMessage
-from .presence import get_online_member_ids
+from .models import ChatGroup, ChatGroupMembership, ChatMessage
+from .presence import (
+    get_online_member_ids,
+    get_online_member_states,
+    touch_member_online,
+    update_member_motion,
+)
 
 
 def _resolve_active_group(request, groups, slug=None):
@@ -35,6 +40,7 @@ def room_view(request, slug=None):
     active_group = _resolve_active_group(request, groups, slug=slug)
     chat_messages = []
     members = []
+    room_members = []
     online_member_ids = set()
 
     if active_group is not None:
@@ -44,6 +50,26 @@ def room_view(request, slug=None):
             .order_by('created_at')[:100]
         )
         members = active_group.members.all().order_by('username')
+        memberships = {
+            membership.user_id: membership
+            for membership in ChatGroupMembership.objects.filter(group=active_group).select_related('user')
+        }
+        live_states = get_online_member_states(active_group.slug)
+        room_members = [
+            {
+                'id': member.id,
+                'username': member.username,
+                'position_x': live_states.get(member.id, {}).get(
+                    'x',
+                    memberships.get(member.id).position_x if memberships.get(member.id) else 50.0,
+                ),
+                'position_y': live_states.get(member.id, {}).get(
+                    'y',
+                    memberships.get(member.id).position_y if memberships.get(member.id) else 50.0,
+                ),
+            }
+            for member in members
+        ]
         online_member_ids = get_online_member_ids(active_group.slug)
 
     context = {
@@ -51,6 +77,7 @@ def room_view(request, slug=None):
         'active_group': active_group,
         'chat_messages': chat_messages,
         'members': members,
+        'room_members': room_members,
         'online_member_ids': online_member_ids,
         'create_group_form': ChatGroupCreateForm(),
         'join_group_form': ChatGroupJoinForm(),
@@ -151,6 +178,48 @@ def send_message_view(request, slug):
     )
 
     return JsonResponse({'ok': True, 'message': payload})
+
+
+@login_required
+def move_member_view(request, slug):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+
+    try:
+        delta_x = float(request.POST.get('dx', 0.0))
+        delta_y = float(request.POST.get('dy', 0.0))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'error': 'Invalid movement payload'}, status=400)
+
+    touch_member_online(group.slug, request.user)
+    member_state = update_member_motion(group.slug, request.user, delta_x, delta_y)
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'chat_{group.slug}',
+        {
+            'type': 'motion.update',
+            'member': member_state,
+        },
+    )
+    return JsonResponse({'ok': True, 'member': member_state})
+
+
+@login_required
+def room_state_view(request, slug):
+    if request.method != 'GET':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+    touch_member_online(group.slug, request.user)
+    return JsonResponse(
+        {
+            'ok': True,
+            'online_member_ids': list(get_online_member_ids(group.slug)),
+            'member_states': get_online_member_states(group.slug),
+        },
+    )
 
 
 def register_view(request):

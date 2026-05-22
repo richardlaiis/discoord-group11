@@ -50,6 +50,9 @@ class ChatGroupMembership(models.Model):
 	group = models.ForeignKey(ChatGroup, on_delete=models.CASCADE)
 	user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 	joined_at = models.DateTimeField(auto_now_add=True)
+	position_x = models.FloatField(default=50.0)
+	position_y = models.FloatField(default=50.0)
+	position_updated_at = models.DateTimeField(auto_now=True)
 
 	class Meta:
 		unique_together = [('group', 'user')]
