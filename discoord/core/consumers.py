@@ -98,6 +98,10 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
     async def motion_update(self, event):
         await self.send_json({'type': 'motion', 'member': event['member']})
 
+    async def blackboard_update(self, event):
+        await self.send_json({'type': 'blackboard_update'})
+
+
     async def set_online(self):
         await database_sync_to_async(mark_member_online)(self.chat_group.slug, self.user)
 

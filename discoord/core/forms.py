@@ -48,3 +48,17 @@ class ChatMessageForm(forms.Form):
         max_length=1000,
         widget=forms.TextInput(attrs={'placeholder': 'Message this group...', 'autocomplete': 'off'}),
     )
+
+
+class BlackboardNoteForm(forms.Form):
+    content = forms.CharField(
+        max_length=1000,
+        widget=forms.Textarea(
+            attrs={
+                'placeholder': 'Write a new note...',
+                'rows': 3,
+                'autocomplete': 'off',
+                'class': 'blackboard-input',
+            }
+        ),
+    )

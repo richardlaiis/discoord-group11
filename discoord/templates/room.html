@@ -184,26 +184,22 @@
                     <button class="icon-btn" type="button" style="padding: 4px;"><span class="material-symbols-outlined">filter_list</span></button>
                 </div>
 
-                <div class="sticky-note">
-                    <div class="sticky-note-header">📌 Pinned by Alice</div>
-                    <div class="sticky-note-content">
-                        Keep notes short and clear.
-                    </div>
+                <div id="blackboard-notes">
+                    {% include 'partials/blackboard_notes.html' with blackboard_notes=blackboard_notes %}
                 </div>
 
-                <div class="sticky-note" style="background: linear-gradient(135deg, #a7f3d0, #6ee7b7); transform: rotate(2deg);">
-                    <div class="sticky-note-header">To-Do</div>
-                    <div class="sticky-note-content">
-                        - Chat<br>
-                        - Presence<br>
-                        - Notes
-                    </div>
-                </div>
-
-                <button class="add-note-btn" type="button">
-                    <span class="material-symbols-outlined">add_box</span>
-                    Add Note
-                </button>
+                {% if active_group %}
+                <form id="blackboard-form" class="blackboard-form" method="post" action="{% url 'create_blackboard_note' active_group.slug %}" hx-post="{% url 'create_blackboard_note' active_group.slug %}" hx-target="#blackboard-notes" hx-swap="innerHTML" hx-on::after-swap="this.reset();">
+                    {% csrf_token %}
+                    <textarea name="content" class="blackboard-input" placeholder="Add a new note..." rows="3"></textarea>
+                    <button class="add-note-btn" type="submit">
+                        <span class="material-symbols-outlined">add_box</span>
+                        Add Note
+                    </button>
+                </form>
+                {% else %}
+                <div class="empty-state">請先加入群組再新增黑板筆記。</div>
+                {% endif %}
             </div>
         </div>
     </aside>
@@ -422,6 +418,19 @@
                 syncMemberStates(payload.member_states || {});
             } else if (payload.type === 'motion') {
                 applyMemberState(payload.member);
+            } else if (payload.type === 'blackboard_update') {
+                // Reload blackboard notes for all users
+                if (activeGroupSlug) {
+                    fetch(`/groups/${activeGroupSlug}/notes/fragment/`)
+                        .then(r => r.text())
+                        .then(html => {
+                            const container = document.getElementById('blackboard-notes');
+                            if (container) {
+                                container.innerHTML = html;
+                            }
+                        })
+                        .catch(err => console.error('Blackboard reload failed:', err));
+                }
             }
         });
 
@@ -649,6 +658,16 @@
             const container = event.target.closest('.chat-messages');
             if (container) {
                 container.scrollTop = container.scrollHeight;
+            }
+        }
+        if (event.target && event.target.id === 'blackboard-notes') {
+            const blackboardForm = document.getElementById('blackboard-form');
+            if (blackboardForm) {
+                blackboardForm.reset();
+            }
+            const container = event.target.closest('.blackboard-container');
+            if (container) {
+                container.scrollTop = 0;
             }
         }
     });

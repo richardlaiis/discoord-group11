@@ -1,0 +1,17 @@
+<div class="sticky-note sticky-note-edit" id="note-{{ note.id }}">
+    <form hx-post="{% url 'update_blackboard_note' active_group.slug note.id %}"
+          hx-target="#blackboard-notes"
+          hx-swap="innerHTML"
+          method="post">
+        {% csrf_token %}
+        <textarea name="content" class="blackboard-input" rows="4">{{ note.content }}</textarea>
+        <div class="sticky-note-actions">
+            <button type="submit" class="action-btn">Save</button>
+            <button type="button" class="action-btn" hx-get="{% url 'group_blackboard_fragment' active_group.slug %}"
+                    hx-target="#blackboard-notes"
+                    hx-swap="innerHTML">
+                Cancel
+            </button>
+        </div>
+    </form>
+</div>

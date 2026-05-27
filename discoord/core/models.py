@@ -73,3 +73,26 @@ class ChatMessage(models.Model):
 
 	def __str__(self):
 		return f'{self.sender} @ {self.group}'
+
+
+class BlackboardNote(models.Model):
+	group = models.ForeignKey(
+		ChatGroup,
+		on_delete=models.CASCADE,
+		related_name='blackboard_notes',
+	)
+	author = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name='blackboard_notes',
+	)
+	content = models.TextField(max_length=1000)
+	pinned = models.BooleanField(default=False)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['-pinned', '-updated_at']
+
+	def __str__(self):
+		return f'Note by {self.author} in {self.group}'

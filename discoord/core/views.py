@@ -6,8 +6,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from .forms import ChatGroupCreateForm, ChatGroupJoinForm, RegistrationForm
-from .models import ChatGroup, ChatGroupMembership, ChatMessage
+from .forms import ChatGroupCreateForm, ChatGroupJoinForm, RegistrationForm, BlackboardNoteForm
+from .models import ChatGroup, ChatGroupMembership, ChatMessage, BlackboardNote
 from .presence import (
     get_online_member_ids,
     get_online_member_states,
@@ -54,6 +54,11 @@ def room_view(request, slug=None):
             membership.user_id: membership
             for membership in ChatGroupMembership.objects.filter(group=active_group).select_related('user')
         }
+        blackboard_notes = (
+            BlackboardNote.objects.filter(group=active_group)
+            .select_related('author')
+            .order_by('-pinned', '-updated_at')[:20]
+        )
         live_states = get_online_member_states(active_group.slug)
         room_members = [
             {
@@ -71,6 +76,8 @@ def room_view(request, slug=None):
             for member in members
         ]
         online_member_ids = get_online_member_ids(active_group.slug)
+    else:
+        blackboard_notes = BlackboardNote.objects.none()
 
     context = {
         'groups': groups,
@@ -79,6 +86,8 @@ def room_view(request, slug=None):
         'members': members,
         'room_members': room_members,
         'online_member_ids': online_member_ids,
+        'blackboard_notes': blackboard_notes,
+        'blackboard_note_form': BlackboardNoteForm(),
         'create_group_form': ChatGroupCreateForm(),
         'join_group_form': ChatGroupJoinForm(),
     }
@@ -94,6 +103,132 @@ def group_messages_fragment(request, slug):
         .order_by('created_at')[:100]
     )
     return render(request, 'partials/chat_messages.html', {'chat_messages': chat_messages})
+
+
+@login_required
+def group_blackboard_fragment(request, slug):
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+    blackboard_notes = (
+        BlackboardNote.objects.filter(group=group)
+        .select_related('author')
+        .order_by('-pinned', '-updated_at')[:20]
+    )
+    return render(request, 'partials/blackboard_notes.html', {
+        'blackboard_notes': blackboard_notes,
+        'active_group': group,
+    })
+
+
+@login_required
+def group_blackboard_note_edit(request, slug, note_id):
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+    note = get_object_or_404(BlackboardNote, pk=note_id, group=group)
+    if note.author != request.user:
+        return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
+    return render(request, 'partials/blackboard_note_edit.html', {
+        'note': note,
+        'active_group': group,
+    })
+
+
+@login_required
+def update_blackboard_note_view(request, slug, note_id):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+    note = get_object_or_404(BlackboardNote, pk=note_id, group=group)
+    if note.author != request.user:
+        return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
+
+    content = (request.POST.get('content') or '').strip()
+    if not content:
+        return JsonResponse({'ok': False, 'error': 'Note cannot be empty'}, status=400)
+
+    note.content = content
+    note.save()
+
+    blackboard_notes = (
+        BlackboardNote.objects.filter(group=group)
+        .select_related('author')
+        .order_by('-pinned', '-updated_at')[:20]
+    )
+    
+    # Broadcast to all group members via WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'chat_{group.slug}',
+        {
+            'type': 'blackboard.update',
+        },
+    )
+    
+    return render(request, 'partials/blackboard_notes.html', {
+        'blackboard_notes': blackboard_notes,
+        'active_group': group,
+    })
+
+
+@login_required
+def delete_blackboard_note_view(request, slug, note_id):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+    note = get_object_or_404(BlackboardNote, pk=note_id, group=group)
+    if note.author != request.user:
+        return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
+
+    note.delete()
+    blackboard_notes = (
+        BlackboardNote.objects.filter(group=group)
+        .select_related('author')
+        .order_by('-pinned', '-updated_at')[:20]
+    )
+    
+    # Broadcast to all group members via WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'chat_{group.slug}',
+        {
+            'type': 'blackboard.update',
+        },
+    )
+    
+    return render(request, 'partials/blackboard_notes.html', {
+        'blackboard_notes': blackboard_notes,
+        'active_group': group,
+    })
+
+
+@login_required
+def create_blackboard_note_view(request, slug):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+    content = (request.POST.get('content') or '').strip()
+    if not content:
+        return JsonResponse({'ok': False, 'error': 'Note cannot be empty'}, status=400)
+
+    BlackboardNote.objects.create(group=group, author=request.user, content=content)
+    blackboard_notes = (
+        BlackboardNote.objects.filter(group=group)
+        .select_related('author')
+        .order_by('-pinned', '-updated_at')[:20]
+    )
+    
+    # Broadcast to all group members via WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'chat_{group.slug}',
+        {'type': 'blackboard.update'},
+    )
+    
+    return render(request, 'partials/blackboard_notes.html', {
+        'blackboard_notes': blackboard_notes,
+        'active_group': group,
+    })
 
 
 @login_required

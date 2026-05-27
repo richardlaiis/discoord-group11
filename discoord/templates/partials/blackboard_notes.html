@@ -1,0 +1,32 @@
+{% if blackboard_notes %}
+    {% for note in blackboard_notes %}
+    <div class="sticky-note{% if note.pinned %} sticky-note-pinned{% endif %}" id="note-{{ note.id }}">
+        <div class="sticky-note-header">
+            {{ note.author.username }} · {{ note.created_at|date:'H:i' }}
+            {% if note.pinned %} · Pinned{% endif %}
+        </div>
+        <div class="sticky-note-content">{{ note.content|linebreaksbr }}</div>
+        {% if request.user == note.author %}
+        <div class="sticky-note-actions">
+            <button class="action-btn" type="button"
+                    hx-get="{% url 'group_blackboard_note_edit' active_group.slug note.id %}"
+                    hx-target="#note-{{ note.id }}"
+                    hx-swap="outerHTML">
+                Edit
+            </button>
+            <form class="inline-action-form" method="post"
+                  hx-post="{% url 'delete_blackboard_note' active_group.slug note.id %}"
+                  hx-target="#blackboard-notes"
+                  hx-swap="innerHTML">
+                {% csrf_token %}
+                <button class="action-btn" type="submit" hx-confirm="Delete this note?">
+                    Delete
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="empty-state">目前還沒有黑板筆記，新增一則吧。</div>
+{% endif %}

@@ -534,8 +534,82 @@
   color: var(--text-primary);
 }
 
-.member-avatar {
-  transform: translate(-50%, -50%);
+.blackboard-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.blackboard-input {
+  width: 100%;
+  min-height: 86px;
+  resize: vertical;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.blackboard-input:focus {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.8);
+}
+
+.sticky-note {
+  padding: 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffef9d 0%, #f5de65 100%);
+  color: #1f2937;
+  margin-bottom: 14px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+.sticky-note-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.inline-action-form {
+  display: inline;
+}
+
+.action-btn {
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn[type="submit"] {
+  background: #ef4444;
+  color: white;
+}
+
+.action-btn[type="submit"]:hover {
+  background: #dc2626;
+  transform: scale(1.05);
+}
+
+.sticky-note-actions button[type="button"] {
+  background: #3b82f6;
+  color: white;
+}
+
+.sticky-note-actions button[type="button"]:hover {
+  background: #2563eb;
+  transform: scale(1.05);
+}
+
+.sticky-note-edit {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .movement-hint {
