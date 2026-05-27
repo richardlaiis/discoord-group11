@@ -615,11 +615,6 @@
             return;
         }
 
-        // 如果用戶在輸入框中，不要攔截按鍵
-        if (isTypingTarget(event.target)) {
-            return;
-        }
-
         event.preventDefault();
         activeKeys.add(key);
     });
@@ -632,11 +627,6 @@
 
         const key = normalizeKey(event.key);
         if (!(key in KEY_TO_VECTOR)) {
-            return;
-        }
-
-        // 如果用戶在輸入框中，不要攔截按鍵
-        if (isTypingTarget(event.target)) {
             return;
         }
 
