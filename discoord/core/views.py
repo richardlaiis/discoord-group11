@@ -3,6 +3,7 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
@@ -28,6 +29,27 @@ def _resolve_active_group(request, groups, slug=None):
     if active_group:
         request.session['active_group_slug'] = active_group.slug
     return active_group
+
+
+def _broadcast_blackboard_update(group, blackboard_notes):
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+
+    html = render_to_string(
+        'partials/blackboard_notes.html',
+        {
+            'blackboard_notes': blackboard_notes,
+            'active_group': group,
+        },
+    )
+    async_to_sync(channel_layer.group_send)(
+        f'chat_{group.slug}',
+        {
+            'type': 'blackboard.update',
+            'html': html,
+        },
+    )
 
 
 @login_required
@@ -153,16 +175,9 @@ def update_blackboard_note_view(request, slug, note_id):
         .select_related('author')
         .order_by('-pinned', '-updated_at')[:20]
     )
-    
-    # Broadcast to all group members via WebSocket
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f'chat_{group.slug}',
-        {
-            'type': 'blackboard.update',
-        },
-    )
-    
+
+    _broadcast_blackboard_update(group, blackboard_notes)
+
     return render(request, 'partials/blackboard_notes.html', {
         'blackboard_notes': blackboard_notes,
         'active_group': group,
@@ -185,16 +200,9 @@ def delete_blackboard_note_view(request, slug, note_id):
         .select_related('author')
         .order_by('-pinned', '-updated_at')[:20]
     )
-    
-    # Broadcast to all group members via WebSocket
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f'chat_{group.slug}',
-        {
-            'type': 'blackboard.update',
-        },
-    )
-    
+
+    _broadcast_blackboard_update(group, blackboard_notes)
+
     return render(request, 'partials/blackboard_notes.html', {
         'blackboard_notes': blackboard_notes,
         'active_group': group,
@@ -217,14 +225,9 @@ def create_blackboard_note_view(request, slug):
         .select_related('author')
         .order_by('-pinned', '-updated_at')[:20]
     )
-    
-    # Broadcast to all group members via WebSocket
-    channel_layer = get_channel_layer()
-    async_to_sync(channel_layer.group_send)(
-        f'chat_{group.slug}',
-        {'type': 'blackboard.update'},
-    )
-    
+
+    _broadcast_blackboard_update(group, blackboard_notes)
+
     return render(request, 'partials/blackboard_notes.html', {
         'blackboard_notes': blackboard_notes,
         'active_group': group,

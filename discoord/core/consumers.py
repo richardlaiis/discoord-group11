@@ -1,7 +1,8 @@
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.template.loader import render_to_string
 
-from .models import ChatGroup, ChatMessage
+from .models import BlackboardNote, ChatGroup, ChatMessage
 from .presence import (
     get_online_member_ids,
     get_online_member_states,
@@ -57,6 +58,21 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             return
 
         if message_type != 'message':
+            if message_type != 'blackboard_note':
+                return
+
+            note_content = (content.get('content') or '').strip()
+            if not note_content:
+                return
+
+            html = await self.create_blackboard_note(self.chat_group, self.user, note_content)
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'blackboard.update',
+                    'html': html,
+                },
+            )
             return
 
         text = (content.get('content') or '').strip()
@@ -99,7 +115,10 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({'type': 'motion', 'member': event['member']})
 
     async def blackboard_update(self, event):
-        await self.send_json({'type': 'blackboard_update'})
+        payload = {'type': 'blackboard_update'}
+        if event.get('html') is not None:
+            payload['html'] = event['html']
+        await self.send_json(payload)
 
 
     async def set_online(self):
@@ -150,6 +169,22 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             'created_at': message.created_at.isoformat(),
             'is_me': message.sender_id == user.id,
         }
+
+    @database_sync_to_async
+    def create_blackboard_note(self, chat_group, user, text):
+        BlackboardNote.objects.create(group=chat_group, author=user, content=text)
+        blackboard_notes = (
+            BlackboardNote.objects.filter(group=chat_group)
+            .select_related('author')
+            .order_by('-pinned', '-updated_at')[:20]
+        )
+        return render_to_string(
+            'partials/blackboard_notes.html',
+            {
+                'blackboard_notes': blackboard_notes,
+                'active_group': chat_group,
+            },
+        )
 
     @database_sync_to_async
     def apply_movement(self, delta_x, delta_y):

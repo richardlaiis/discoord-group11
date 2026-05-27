@@ -207,12 +207,19 @@
                     <button class="icon-btn" type="button" style="padding: 4px;"><span class="material-symbols-outlined">filter_list</span></button>
                 </div>
 
-                <div id="blackboard-notes">
+                <div
+                    id="blackboard-notes"
+                    {% if active_group %}
+                    hx-get="{% url 'group_blackboard_fragment' active_group.slug %}"
+                    hx-trigger="load, every 10s"
+                    hx-swap="innerHTML"
+                    {% endif %}
+                >
                     {% include 'partials/blackboard_notes.html' with blackboard_notes=blackboard_notes %}
                 </div>
 
                 {% if active_group %}
-                <form id="blackboard-form" class="blackboard-form" method="post" action="{% url 'create_blackboard_note' active_group.slug %}" hx-post="{% url 'create_blackboard_note' active_group.slug %}" hx-target="#blackboard-notes" hx-swap="innerHTML" hx-on::after-swap="this.reset();">
+                <form id="blackboard-form" class="blackboard-form" method="post" action="{% url 'create_blackboard_note' active_group.slug %}" hx-post="{% url 'create_blackboard_note' active_group.slug %}" hx-target="#blackboard-notes" hx-swap="innerHTML" hx-on::after-request="if (event.detail.successful) this.reset();">
                     {% csrf_token %}
                     <textarea name="content" class="blackboard-input" placeholder="Add a new note..." rows="3"></textarea>
                     <button class="add-note-btn" type="submit">
@@ -443,12 +450,14 @@
             } else if (payload.type === 'motion') {
                 applyMemberState(payload.member);
             } else if (payload.type === 'blackboard_update') {
-                // Reload blackboard notes for all users
-                if (activeGroupSlug) {
+                const container = document.getElementById('blackboard-notes');
+                if (container && payload.html) {
+                    container.innerHTML = payload.html;
+                } else if (activeGroupSlug) {
+                    // Reload blackboard notes for all users
                     fetch(`/groups/${activeGroupSlug}/notes/fragment/`)
                         .then(r => r.text())
                         .then(html => {
-                            const container = document.getElementById('blackboard-notes');
                             if (container) {
                                 container.innerHTML = html;
                             }
@@ -503,6 +512,7 @@
                 });
             });
         }
+
     } else {
         startStatePolling();
     }
@@ -686,14 +696,6 @@
             }
         }
         if (event.target && event.target.id === 'blackboard-notes') {
-            const blackboardForm = document.getElementById('blackboard-form');
-            if (blackboardForm) {
-                blackboardForm.reset();
-            }
-            const container = event.target.closest('.blackboard-container');
-            if (container) {
-                container.scrollTop = 0;
-            }
         }
     });
 
