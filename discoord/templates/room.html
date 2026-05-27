@@ -605,6 +605,11 @@
     }
 
     document.addEventListener('keydown', (event) => {
+        // Ignore movement keys when typing into inputs/textareas/contentEditable
+        if (isTypingTarget(event.target)) {
+            return;
+        }
+
         const key = normalizeKey(event.key);
         if (!(key in KEY_TO_VECTOR)) {
             return;
@@ -620,6 +625,11 @@
     });
 
     document.addEventListener('keyup', (event) => {
+        // Ignore movement keys when typing into inputs/textareas/contentEditable
+        if (isTypingTarget(event.target)) {
+            return;
+        }
+
         const key = normalizeKey(event.key);
         if (!(key in KEY_TO_VECTOR)) {
             return;
