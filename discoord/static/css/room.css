@@ -14,6 +14,56 @@
   flex-direction: column;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
+  position: relative;
+  transform: translateX(0);
+  transition: transform 280ms cubic-bezier(.22,.9,.12,1), width 280ms cubic-bezier(.22,.9,.12,1), padding 200ms ease;
+}
+
+/* Collapsed state: slide out to the left */
+.sidebar.collapsed {
+  transform: translateX(-6px);
+  width: 0 !important;
+  min-width: 0;
+  padding: 0 !important;
+  border-right: 0 !important;
+  overflow: hidden;
+}
+
+/* Collapse button inside header stays visible in normal state */
+.sidebar .sidebar-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+/* Expand button (floating) */
+#sidebar-expand-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+/* When the container has collapsed sidebar, let main-area fill space */
+.app-container.sidebar-collapsed .main-area {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* hide sidebar children when collapsed to avoid focusable elements showing */
+.sidebar.collapsed * {
+  visibility: hidden;
+}
+/* but keep the collapse button hidden since expand button is external */
+.sidebar.collapsed .sidebar-collapse-btn {
+  visibility: hidden;
 }
 
 .sidebar-header {
@@ -30,6 +80,100 @@
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text-primary);
+}
+
+/* Sidebar tabs */
+.sidebar-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-tab {
+  flex: 1;
+  padding: 8px 10px;
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.sidebar-tab.active {
+  background: rgba(79, 140, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.sidebar-tab-panel {
+  display: block;
+}
+
+/* Make sidebar panels take available space and scroll independently */
+.sidebar > .sidebar-tab-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* Ensure sections inside panels layout correctly */
+.sidebar-tab-panel .sidebar-section {
+  flex: 0 0 auto;
+}
+.sidebar-tab-panel .sidebar-scroll-area {
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+/* Keep user profile bar pinned to bottom */
+.sidebar .user-profile-bar {
+  margin-top: auto;
+  z-index: 10;
+}
+
+/* Current room simplified layout */
+.current-room-info {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.current-room-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.room-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.room-code {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.current-room-bottom {
+  margin-top: 6px;
+}
+
+.room-members {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+/* Increase vertical spacing for readability */
+.sidebar .sidebar-section h3,
+.sidebar .current-room-info {
+  margin-bottom: 10px;
 }
 
 .sidebar-section {

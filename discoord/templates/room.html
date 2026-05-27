@@ -11,77 +11,102 @@
         <div class="sidebar-header">
             <h1>Discoord</h1>
             <span class="presence-pill {% if active_group %}online{% endif %}">{% if active_group %}Live{% else %}Idle{% endif %}</span>
+            <button id="sidebar-collapse-btn" class="icon-btn sidebar-collapse-btn" type="button" title="Collapse sidebar">
+                <span class="material-symbols-outlined">chevron_left</span>
+            </button>
         </div>
 
-        {% if messages %}
-        <div class="flash-stack">
-            {% for message in messages %}
-            <div class="flash-message flash-{{ message.tags|default:'info' }}">{{ message }}</div>
-            {% endfor %}
-        </div>
-        {% endif %}
-
-        <div class="sidebar-section">
-            <h3>Groups</h3>
-            <div class="group-tools">
-                <form class="group-form" method="post" action="{% url 'create_group' %}">
-                    {% csrf_token %}
-                    {{ create_group_form.name }}
-                    <button class="icon-btn" type="submit" title="Create group">
-                        <span class="material-symbols-outlined">add</span>
-                    </button>
-                </form>
-                <form class="group-form" method="post" action="{% url 'join_group' %}">
-                    {% csrf_token %}
-                    {{ join_group_form.invite_code }}
-                    <button class="icon-btn" type="submit" title="Join group">
-                        <span class="material-symbols-outlined">login</span>
-                    </button>
-                </form>
-            </div>
+        <div class="sidebar-tabs">
+            <button class="sidebar-tab active" data-tab="groups">Groups</button>
+            <button class="sidebar-tab" data-tab="room">Room</button>
         </div>
 
-        <div class="sidebar-section sidebar-scroll-area">
-            <h3>Joined</h3>
-            <div class="group-list">
-                {% for group in groups %}
-                <a class="group-link {% if active_group and group.pk == active_group.pk %}active{% endif %}" href="{% url 'room_group' group.slug %}">
-                    <div class="user-item">
-                        <div class="avatar" style="border-radius: var(--radius-md); background: var(--accent-primary);">#</div>
-                        <div class="user-info">
-                            <span class="user-name">{{ group.name }}</span>
-                            <span class="user-activity">{{ group.members.all|length }} people</span>
-                            {% if active_group and group.pk == active_group.pk %}
-                            <div class="group-meta">
-                                <span class="group-code">Active</span>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </a>
-                {% empty %}
-                <div class="empty-state">No groups yet. Create or join one above.</div>
+        <div id="sidebar-groups" class="sidebar-tab-panel">
+            {% if messages %}
+            <div class="flash-stack">
+                {% for message in messages %}
+                <div class="flash-message flash-{{ message.tags|default:'info' }}">{{ message }}</div>
                 {% endfor %}
             </div>
+            {% endif %}
+
+            <div class="sidebar-section">
+                <h3>Groups</h3>
+                <div class="group-tools">
+                    <form class="group-form" method="post" action="{% url 'create_group' %}">
+                        {% csrf_token %}
+                        {{ create_group_form.name }}
+                        <button class="icon-btn" type="submit" title="Create group">
+                            <span class="material-symbols-outlined">add</span>
+                        </button>
+                    </form>
+                    <form class="group-form" method="post" action="{% url 'join_group' %}">
+                        {% csrf_token %}
+                        {{ join_group_form.invite_code }}
+                        <button class="icon-btn" type="submit" title="Join group">
+                            <span class="material-symbols-outlined">login</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="sidebar-section sidebar-scroll-area">
+                <h3>Joined</h3>
+                <div class="group-list">
+                    {% for group in groups %}
+                    <a class="group-link {% if active_group and group.pk == active_group.pk %}active{% endif %}" href="{% url 'room_group' group.slug %}">
+                        <div class="user-item">
+                            <div class="avatar" style="border-radius: var(--radius-md); background: var(--accent-primary);">#</div>
+                            <div class="user-info">
+                                <span class="user-name">{{ group.name }}</span>
+                                <span class="user-activity">{{ group.members.all|length }} people</span>
+                                {% if active_group and group.pk == active_group.pk %}
+                                <div class="group-meta">
+                                    <span class="group-code">Active</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </a>
+                    {% empty %}
+                    <div class="empty-state">No groups yet. Create or join one above.</div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
 
-        <div class="sidebar-section sidebar-scroll-area">
-            <h3>Members</h3>
-            <div class="group-list">
-                {% for member in members %}
-                <div class="user-item member-row" data-user-id="{{ member.id }}" data-online="{% if member.id in online_member_ids %}true{% else %}false{% endif %}">
-                    <div class="avatar">
-                        {{ member.username|first|upper }}
-                        <div class="status-dot {% if member.id in online_member_ids %}status-online{% else %}status-idle{% endif %}"></div>
+        <div id="sidebar-room" class="sidebar-tab-panel" style="display: none;">
+            <div class="sidebar-section">
+                <h3>Current Group</h3>
+                <div class="current-room-info">
+                    <div class="current-room-top">
+                        <div class="room-name">{{ active_group.name|default:"No active group" }}</div>
+                        <div class="room-code">{% if active_group %}{{ active_group.invite_code }}{% else %}—{% endif %}</div>
                     </div>
-                    <div class="user-info">
-                        <span class="user-name">{{ member.username }}</span>
-                        <span class="presence-pill {% if member.id in online_member_ids %}online{% endif %}">{% if member.id in online_member_ids %}Online{% else %}Offline{% endif %}</span>
+                    <div class="current-room-bottom">
+                        <div id="room-online-count" class="room-members" data-total="{{ members|length }}">{{ online_member_ids|length }}/{{ members|length }} online</div>
                     </div>
                 </div>
-                {% empty %}
-                <div class="empty-state">No members yet.</div>
-                {% endfor %}
+            </div>
+
+            <div class="sidebar-section sidebar-scroll-area">
+                <h3>Members</h3>
+                <div class="group-list">
+                    {% for member in members %}
+                    <div class="user-item member-row" data-user-id="{{ member.id }}" data-online="{% if member.id in online_member_ids %}true{% else %}false{% endif %}">
+                        <div class="avatar">
+                            {{ member.username|first|upper }}
+                            <div class="status-dot {% if member.id in online_member_ids %}status-online{% else %}status-idle{% endif %}"></div>
+                        </div>
+                        <div class="user-info">
+                            <span class="user-name">{{ member.username }}</span>
+                            <span class="presence-pill {% if member.id in online_member_ids %}online{% endif %}">{% if member.id in online_member_ids %}Online{% else %}Offline{% endif %}</span>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="empty-state">No members yet.</div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
 
@@ -109,6 +134,10 @@
         </div>
     </aside>
 
+    <button id="sidebar-expand-btn" class="icon-btn" title="Expand sidebar" style="display:none; position: fixed; left: 12px; top: 20px; z-index: 80;">
+        <span class="material-symbols-outlined">chevron_right</span>
+    </button>
+
     <main class="main-area">
         {% if room_members %}
             {% for member in room_members %}
@@ -126,13 +155,7 @@
             <div class="empty-state">No members yet.</div>
         {% endif %}
 
-        <div class="main-room-summary">
-            <div>
-                <div class="summary-title">{{ active_group.name|default:"No active group" }}</div>
-            </div>
-            <div class="summary-chip">{% if active_group %}Code {{ active_group.invite_code }}{% else %}No code{% endif %}</div>
-            <div id="room-online-count" class="summary-chip">{{ online_member_ids|length }} online</div>
-        </div>
+        {# Group summary moved to sidebar - no main summary shown #}
 
         <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 30px; backdrop-filter: blur(10px); border: 1px solid var(--border-color);">
             <button class="icon-btn" type="button" title="Emote"><span class="material-symbols-outlined">mood</span></button>
@@ -386,7 +409,8 @@
 
         const roomOnlineCount = document.getElementById('room-online-count');
         if (roomOnlineCount) {
-            roomOnlineCount.textContent = `${onlineIds.size} online`;
+            const total = Number(roomOnlineCount.dataset.total) || document.querySelectorAll('.member-row').length || 0;
+            roomOnlineCount.textContent = `${onlineIds.size}/${total} online`;
         }
 
         avatarByUserId.forEach((avatar, userId) => {
@@ -638,6 +662,7 @@
         if (!(key in KEY_TO_VECTOR)) {
             return;
         }
+
         event.preventDefault();
         activeKeys.delete(key);
     });
@@ -671,5 +696,48 @@
             }
         }
     });
+
+    // Sidebar collapse / expand and tab switching
+    (function() {
+        const app = document.querySelector('.app-container');
+        const sidebar = document.querySelector('.sidebar');
+        const collapseBtn = document.getElementById('sidebar-collapse-btn');
+        const expandBtn = document.getElementById('sidebar-expand-btn');
+        if (!app || !sidebar || !collapseBtn || !expandBtn) return;
+
+        function setCollapsed(collapsed) {
+            sidebar.classList.toggle('collapsed', collapsed);
+            app.classList.toggle('sidebar-collapsed', collapsed);
+            expandBtn.style.display = collapsed ? 'inline-flex' : 'none';
+            // persist preference
+            try { localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+        }
+
+        collapseBtn.addEventListener('click', () => setCollapsed(true));
+        expandBtn.addEventListener('click', () => setCollapsed(false));
+
+        // Initialize from saved preference
+        try {
+            const saved = localStorage.getItem('sidebar-collapsed');
+            if (saved === '1') {
+                setCollapsed(true);
+            }
+        } catch (e) {}
+
+        // Sidebar tabs
+        const tabs = Array.from(document.querySelectorAll('.sidebar-tab'));
+        const panels = Array.from(document.querySelectorAll('.sidebar-tab-panel'));
+        function showSidebarTab(name) {
+            tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+            panels.forEach(p => { p.style.display = (p.id === `sidebar-${name}`) ? 'block' : 'none'; });
+            try { localStorage.setItem('sidebar-active-tab', name); } catch (e) {}
+        }
+
+        tabs.forEach(t => t.addEventListener('click', () => showSidebarTab(t.dataset.tab)));
+        try {
+            const savedTab = localStorage.getItem('sidebar-active-tab');
+            if (savedTab) showSidebarTab(savedTab);
+        } catch (e) {}
+    })();
 </script>
 {% endblock %}
