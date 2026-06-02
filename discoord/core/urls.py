@@ -9,6 +9,7 @@ urlpatterns = [
     path('groups/<slug:slug>/move/', views.move_member_view, name='move_member'),
     path('groups/<slug:slug>/state/', views.room_state_view, name='room_state'),
     path('groups/<slug:slug>/messages/fragment/', views.group_messages_fragment, name='group_messages_fragment'),
+    path('groups/<slug:slug>/members/<int:user_id>/profile/', views.group_member_profile_view, name='group_member_profile'),
     path('groups/<slug:slug>/notes/', views.create_blackboard_note_view, name='create_blackboard_note'),
     path('groups/<slug:slug>/notes/fragment/', views.group_blackboard_fragment, name='group_blackboard_fragment'),
     path('groups/<slug:slug>/notes/<int:note_id>/edit/', views.group_blackboard_note_edit, name='group_blackboard_note_edit'),

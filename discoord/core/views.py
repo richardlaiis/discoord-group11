@@ -8,7 +8,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from .forms import ChatGroupCreateForm, ChatGroupJoinForm, RegistrationForm, BlackboardNoteForm
-from .models import ChatGroup, ChatGroupMembership, ChatMessage, BlackboardNote
+from .models import ChatGroup, ChatGroupMembership, ChatMessage, BlackboardNote, UserProfile
 from .presence import (
     get_online_member_ids,
     get_online_member_states,
@@ -76,16 +76,24 @@ def room_view(request, slug=None):
             membership.user_id: membership
             for membership in ChatGroupMembership.objects.filter(group=active_group).select_related('user')
         }
+        profiles_by_user_id = {
+            profile.user_id: profile
+            for profile in UserProfile.objects.filter(user__in=members)
+        }
         blackboard_notes = (
             BlackboardNote.objects.filter(group=active_group)
             .select_related('author')
             .order_by('-pinned', '-updated_at')[:20]
         )
+        online_member_ids = get_online_member_ids(active_group.slug)
         live_states = get_online_member_states(active_group.slug)
         room_members = [
             {
                 'id': member.id,
                 'username': member.username,
+                'display_name': (profiles_by_user_id.get(member.id).display_name or member.username)
+                if profiles_by_user_id.get(member.id)
+                else member.username,
                 'position_x': live_states.get(member.id, {}).get(
                     'x',
                     memberships.get(member.id).position_x if memberships.get(member.id) else 50.0,
@@ -97,15 +105,27 @@ def room_view(request, slug=None):
             }
             for member in members
         ]
-        online_member_ids = get_online_member_ids(active_group.slug)
+        member_cards = [
+            {
+                'id': member.id,
+                'username': member.username,
+                'display_name': (profiles_by_user_id.get(member.id).display_name or member.username)
+                if profiles_by_user_id.get(member.id)
+                else member.username,
+                'is_online': member.id in online_member_ids,
+            }
+            for member in members
+        ]
     else:
         blackboard_notes = BlackboardNote.objects.none()
+        member_cards = []
 
     context = {
         'groups': groups,
         'active_group': active_group,
         'chat_messages': chat_messages,
         'members': members,
+        'member_cards': member_cards,
         'room_members': room_members,
         'online_member_ids': online_member_ids,
         'blackboard_notes': blackboard_notes,
@@ -114,6 +134,11 @@ def room_view(request, slug=None):
         'join_group_form': ChatGroupJoinForm(),
     }
     return render(request, 'room.html', context)
+
+
+def _get_or_create_profile(user):
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return profile
 
 
 @login_required
@@ -371,3 +396,67 @@ def register_view(request):
         form = RegistrationForm()
 
     return render(request, 'registration/register.html', {'form': form})
+
+
+@login_required
+def group_member_profile_view(request, slug, user_id):
+    group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+    if not group.members.filter(pk=user_id).exists():
+        return JsonResponse({'ok': False, 'error': 'Member not found'}, status=404)
+
+    target_user = group.members.filter(pk=user_id).only('id', 'username').first()
+    profile = _get_or_create_profile(target_user)
+
+    if request.method == 'GET':
+        return JsonResponse(
+            {
+                'ok': True,
+                'profile': {
+                    'user_id': target_user.id,
+                    'username': target_user.username,
+                    'display_name': profile.display_name,
+                    'pronouns': profile.pronouns,
+                    'bio': profile.bio,
+                    'status_text': profile.status_text,
+                    'status_mode': profile.status_mode,
+                    'is_self': target_user.id == request.user.id,
+                },
+            }
+        )
+
+    if request.method != 'POST':
+        return JsonResponse({'ok': False, 'error': 'Method not allowed'}, status=405)
+
+    if target_user.id != request.user.id:
+        return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
+
+    def _clean_field(value, limit):
+        return (value or '').strip()[:limit]
+
+    allowed_modes = {choice[0] for choice in UserProfile.STATUS_CHOICES}
+    status_mode = _clean_field(request.POST.get('status_mode'), 12)
+    if status_mode not in allowed_modes:
+        status_mode = profile.status_mode
+
+    profile.display_name = _clean_field(request.POST.get('display_name'), 80)
+    profile.pronouns = _clean_field(request.POST.get('pronouns'), 40)
+    profile.bio = _clean_field(request.POST.get('bio'), 240)
+    profile.status_text = _clean_field(request.POST.get('status_text'), 120)
+    profile.status_mode = status_mode
+    profile.save()
+
+    return JsonResponse(
+        {
+            'ok': True,
+            'profile': {
+                'user_id': target_user.id,
+                'username': target_user.username,
+                'display_name': profile.display_name,
+                'pronouns': profile.pronouns,
+                'bio': profile.bio,
+                'status_text': profile.status_text,
+                'status_mode': profile.status_mode,
+                'is_self': True,
+            },
+        }
+    )

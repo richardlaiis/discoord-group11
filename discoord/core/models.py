@@ -96,3 +96,30 @@ class BlackboardNote(models.Model):
 
 	def __str__(self):
 		return f'Note by {self.author} in {self.group}'
+
+
+class UserProfile(models.Model):
+	STATUS_CHOICES = [
+		('online', 'Online'),
+		('idle', 'Idle'),
+		('dnd', 'Do not disturb'),
+		('invisible', 'Invisible'),
+	]
+
+	user = models.OneToOneField(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name='profile',
+	)
+	display_name = models.CharField(max_length=80, blank=True)
+	pronouns = models.CharField(max_length=40, blank=True)
+	bio = models.TextField(max_length=240, blank=True)
+	status_text = models.CharField(max_length=120, blank=True)
+	status_mode = models.CharField(max_length=12, choices=STATUS_CHOICES, default='online')
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ['user__username']
+
+	def __str__(self):
+		return f'Profile: {self.user}'

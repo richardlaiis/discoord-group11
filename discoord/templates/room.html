@@ -92,15 +92,15 @@
             <div class="sidebar-section sidebar-scroll-area">
                 <h3>Members</h3>
                 <div class="group-list">
-                    {% for member in members %}
-                    <div class="user-item member-row" data-user-id="{{ member.id }}" data-online="{% if member.id in online_member_ids %}true{% else %}false{% endif %}">
+                    {% for member in member_cards %}
+                    <div class="user-item member-row" data-user-id="{{ member.id }}" data-username="{{ member.display_name|escape }}" data-online="{% if member.is_online %}true{% else %}false{% endif %}">
                         <div class="avatar">
-                            {{ member.username|first|upper }}
-                            <div class="status-dot {% if member.id in online_member_ids %}status-online{% else %}status-idle{% endif %}"></div>
+                            {{ member.display_name|first|upper }}
+                            <div class="status-dot {% if member.is_online %}status-online{% else %}status-idle{% endif %}"></div>
                         </div>
                         <div class="user-info">
-                            <span class="user-name">{{ member.username }}</span>
-                            <span class="presence-pill {% if member.id in online_member_ids %}online{% endif %}">{% if member.id in online_member_ids %}Online{% else %}Offline{% endif %}</span>
+                            <span class="user-name">{{ member.display_name }}</span>
+                            <span class="presence-pill {% if member.is_online %}online{% endif %}">{% if member.is_online %}Online{% else %}Offline{% endif %}</span>
                         </div>
                     </div>
                     {% empty %}
@@ -144,16 +144,74 @@
             <div
                 class="space-avatar member-avatar {% if member.id == request.user.id %}is-self{% endif %}"
                 data-user-id="{{ member.id }}"
-                data-username="{{ member.username|escape }}"
+                data-username="{{ member.display_name|escape }}"
                 style="top: {{ member.position_y|floatformat:3 }}%; left: {{ member.position_x|floatformat:3 }}%;"
-                title="{{ member.username }}"
+                title="{{ member.display_name }}"
             >
-                {{ member.username|first|upper }}
+                {{ member.display_name|first|upper }}
             </div>
             {% endfor %}
         {% else %}
             <div class="empty-state">No members yet.</div>
         {% endif %}
+
+        <div id="profile-popover" class="profile-popover" aria-hidden="true">
+            <div class="profile-popover-header">
+                <div class="profile-avatar" id="profile-avatar">?</div>
+                <div class="profile-title">
+                    <div class="profile-display-name" id="profile-display-name">Loading...</div>
+                    <div class="profile-username" id="profile-username"></div>
+                </div>
+                <button class="icon-btn profile-close-btn" id="profile-close-btn" type="button" title="Close">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="profile-status">
+                <span id="profile-status-mode" class="profile-status-mode status-mode-online">Online</span>
+                <span id="profile-status-text" class="profile-status-text"></span>
+            </div>
+            <div id="profile-fields" class="profile-fields">
+                <div class="profile-field">
+                    <span class="profile-label">Pronouns</span>
+                    <span class="profile-value" data-field="pronouns">—</span>
+                </div>
+                <div class="profile-field">
+                    <span class="profile-label">Bio</span>
+                    <span class="profile-value" data-field="bio">—</span>
+                </div>
+            </div>
+            <form id="profile-edit-form" class="profile-edit-form" style="display: none;">
+                <label class="profile-input">
+                    <span>Display name</span>
+                    <input type="text" name="display_name" maxlength="80" placeholder="Add a display name">
+                </label>
+                <label class="profile-input">
+                    <span>Pronouns</span>
+                    <input type="text" name="pronouns" maxlength="40" placeholder="She/Her">
+                </label>
+                <label class="profile-input">
+                    <span>Status</span>
+                    <input type="text" name="status_text" maxlength="120" placeholder="What's up?">
+                </label>
+                <label class="profile-input">
+                    <span>Status mode</span>
+                    <select name="status_mode">
+                        <option value="online">Online</option>
+                        <option value="idle">Idle</option>
+                        <option value="dnd">Do not disturb</option>
+                        <option value="invisible">Invisible</option>
+                    </select>
+                </label>
+                <label class="profile-input">
+                    <span>Bio</span>
+                    <textarea name="bio" rows="3" maxlength="240" placeholder="Tell people about you"></textarea>
+                </label>
+                <button class="profile-save-btn" type="submit">Save profile</button>
+            </form>
+            <div class="profile-actions" id="profile-actions" style="display: none;">
+                <button class="profile-edit-btn" id="profile-edit-btn" type="button">Edit profile</button>
+            </div>
+        </div>
 
         {# Group summary moved to sidebar - no main summary shown #}
 
@@ -259,6 +317,21 @@
     let moveRequestInFlight = false;
     let lastFallbackMoveAt = 0;
     let statePollHandle = null;
+    const profilePopover = document.getElementById('profile-popover');
+    const profileAvatar = document.getElementById('profile-avatar');
+    const profileDisplayName = document.getElementById('profile-display-name');
+    const profileUsername = document.getElementById('profile-username');
+    const profileStatusMode = document.getElementById('profile-status-mode');
+    const profileStatusText = document.getElementById('profile-status-text');
+    const profileFields = document.getElementById('profile-fields');
+    const profileEditForm = document.getElementById('profile-edit-form');
+    const profileEditBtn = document.getElementById('profile-edit-btn');
+    const profileActions = document.getElementById('profile-actions');
+    const profileCloseBtn = document.getElementById('profile-close-btn');
+    let activeProfileUserId = null;
+    let activeProfileAnchor = null;
+    let activeProfileData = null;
+    let profileEditMode = false;
 
     function ensureAvatarElement(userId, username) {
         let avatar = avatarByUserId.get(userId);
@@ -281,7 +354,7 @@
             mainArea.prepend(avatar);
         }
 
-        avatar.dataset.username = username || avatar.dataset.username || `User ${userId}`;
+        avatar.dataset.username = avatar.dataset.username || username || `User ${userId}`;
         avatar.title = avatar.dataset.username;
         avatar.textContent = avatar.dataset.username.charAt(0).toUpperCase();
         if (Number(userId) === currentUserId) {
@@ -290,6 +363,180 @@
 
         avatarByUserId.set(Number(userId), avatar);
         return avatar;
+    }
+
+    function profileUrl(userId) {
+        if (!activeGroupSlug) {
+            return null;
+        }
+        return `/groups/${activeGroupSlug}/members/${userId}/profile/`;
+    }
+
+    function setPopoverOpen(open) {
+        if (!profilePopover) {
+            return;
+        }
+        profilePopover.classList.toggle('is-open', open);
+        profilePopover.setAttribute('aria-hidden', open ? 'false' : 'true');
+        if (!open) {
+            activeProfileUserId = null;
+            activeProfileAnchor = null;
+            activeProfileData = null;
+            profileEditMode = false;
+        }
+    }
+
+    function setStatusModeClass(mode) {
+        if (!profileStatusMode) {
+            return;
+        }
+        const normalized = mode || 'online';
+        profileStatusMode.classList.remove('status-mode-online', 'status-mode-idle', 'status-mode-dnd', 'status-mode-invisible');
+        profileStatusMode.classList.add(`status-mode-${normalized}`);
+        profileStatusMode.textContent = normalized.replace(/^(.)/, (m) => m.toUpperCase());
+    }
+
+    function updateDisplayNameForUser(userId, displayName, username) {
+        const safeName = displayName || username || 'User';
+        document.querySelectorAll(`.member-row[data-user-id="${userId}"]`).forEach((row) => {
+            row.dataset.username = safeName;
+            const nameNode = row.querySelector('.user-name');
+            if (nameNode) {
+                nameNode.textContent = safeName;
+            }
+            const avatar = row.querySelector('.avatar');
+            if (avatar) {
+                avatar.childNodes.forEach((node) => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        node.textContent = safeName.charAt(0).toUpperCase();
+                    }
+                });
+            }
+        });
+
+        const spaceAvatar = document.querySelector(`.space-avatar[data-user-id="${userId}"]`);
+        if (spaceAvatar) {
+            spaceAvatar.dataset.username = safeName;
+            spaceAvatar.title = safeName;
+            spaceAvatar.textContent = safeName.charAt(0).toUpperCase();
+        }
+
+        if (Number(userId) === currentUserId) {
+            const profileBar = document.querySelector('.user-profile-bar .user-name');
+            if (profileBar) {
+                profileBar.textContent = safeName;
+            }
+        }
+    }
+
+    function renderProfile(profile) {
+        if (!profile) {
+            return;
+        }
+        const displayName = profile.display_name || profile.username || 'User';
+        if (profileDisplayName) {
+            profileDisplayName.textContent = displayName;
+        }
+        if (profileUsername) {
+            profileUsername.textContent = profile.username ? `@${profile.username}` : '';
+        }
+        if (profileAvatar) {
+            profileAvatar.textContent = displayName.charAt(0).toUpperCase();
+        }
+        if (profileStatusText) {
+            profileStatusText.textContent = profile.status_text || 'No status set';
+        }
+        setStatusModeClass(profile.status_mode || 'online');
+
+        if (profileFields) {
+            profileFields.querySelectorAll('[data-field]').forEach((node) => {
+                const field = node.dataset.field;
+                node.textContent = profile[field] ? profile[field] : '—';
+            });
+        }
+
+        if (profileEditForm) {
+            profileEditForm.display_name.value = profile.display_name || '';
+            profileEditForm.pronouns.value = profile.pronouns || '';
+            profileEditForm.status_text.value = profile.status_text || '';
+            profileEditForm.status_mode.value = profile.status_mode || 'online';
+            profileEditForm.bio.value = profile.bio || '';
+        }
+
+        const isSelf = Boolean(profile.is_self);
+        if (profileActions) {
+            profileActions.style.display = isSelf ? 'flex' : 'none';
+        }
+        if (profileEditForm) {
+            profileEditForm.style.display = isSelf && profileEditMode ? 'grid' : 'none';
+        }
+        if (profileFields) {
+            profileFields.style.display = isSelf && profileEditMode ? 'none' : 'grid';
+        }
+        updateDisplayNameForUser(profile.user_id, profile.display_name, profile.username);
+    }
+
+    function positionPopover(anchorRect) {
+        if (!profilePopover || !anchorRect) {
+            return;
+        }
+        const margin = 12;
+        const popoverWidth = profilePopover.offsetWidth;
+        const popoverHeight = profilePopover.offsetHeight;
+        let left = anchorRect.right + 12;
+        if (left + popoverWidth + margin > window.innerWidth) {
+            left = anchorRect.left - popoverWidth - 12;
+        }
+        left = Math.max(margin, Math.min(left, window.innerWidth - popoverWidth - margin));
+        let top = anchorRect.top + (anchorRect.height / 2) - (popoverHeight / 2);
+        top = Math.max(margin, Math.min(top, window.innerHeight - popoverHeight - margin));
+        profilePopover.style.left = `${left}px`;
+        profilePopover.style.top = `${top}px`;
+    }
+
+    function showProfilePopover(anchor, userId, usernameFallback) {
+        const url = profileUrl(userId);
+        if (!url || !profilePopover) {
+            return;
+        }
+        activeProfileUserId = userId;
+        activeProfileAnchor = anchor;
+        activeProfileData = {
+            username: usernameFallback || 'User',
+            display_name: '',
+            pronouns: '',
+            bio: '',
+            status_text: '',
+            status_mode: 'online',
+            is_self: userId === currentUserId,
+        };
+        renderProfile(activeProfileData);
+        setPopoverOpen(true);
+        positionPopover(anchor.getBoundingClientRect());
+
+        fetch(url, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        }).then(async (response) => {
+            if (!response.ok) {
+                throw new Error('profile-load-failed');
+            }
+            return response.json();
+        }).then((payload) => {
+            if (!payload || !payload.ok || !payload.profile) {
+                return;
+            }
+            if (activeProfileUserId !== userId) {
+                return;
+            }
+            activeProfileData = payload.profile;
+            renderProfile(activeProfileData);
+            positionPopover(anchor.getBoundingClientRect());
+        }).catch(() => {
+            // Keep the placeholder profile visible if load fails.
+        });
     }
 
     function applyMemberState(memberState) {
@@ -428,8 +675,53 @@
     const socket = activeGroupSlug ? new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/chat/${activeGroupSlug}/`) : null;
 
     function getCsrfToken() {
-        const field = document.querySelector('#chat-form input[name="csrfmiddlewaretoken"]');
+        const field = document.querySelector('input[name="csrfmiddlewaretoken"]');
         return field ? field.value : '';
+    }
+
+    if (profileCloseBtn) {
+        profileCloseBtn.addEventListener('click', () => setPopoverOpen(false));
+    }
+
+    if (profileEditBtn && profileEditForm) {
+        profileEditBtn.addEventListener('click', () => {
+            profileEditMode = true;
+            renderProfile(activeProfileData);
+        });
+
+        profileEditForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            if (!activeProfileUserId) {
+                return;
+            }
+            const url = profileUrl(activeProfileUserId);
+            if (!url) {
+                return;
+            }
+            const formData = new FormData(profileEditForm);
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                body: new URLSearchParams(formData),
+            }).then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('profile-save-failed');
+                }
+                return response.json();
+            }).then((payload) => {
+                if (!payload || !payload.ok || !payload.profile) {
+                    return;
+                }
+                activeProfileData = payload.profile;
+                profileEditMode = false;
+                renderProfile(activeProfileData);
+            }).catch(() => {
+                // Keep edit mode if save fails.
+            });
+        });
     }
 
     if (socket) {
@@ -679,6 +971,36 @@
 
     window.addEventListener('blur', () => {
         activeKeys.clear();
+    });
+
+    document.addEventListener('click', (event) => {
+        const avatar = event.target.closest('.space-avatar[data-user-id], .member-row[data-user-id]');
+        if (avatar) {
+            const userId = Number(avatar.dataset.userId);
+            const username = avatar.dataset.username || avatar.getAttribute('title') || '';
+            showProfilePopover(avatar, userId, username);
+            return;
+        }
+
+        if (profilePopover && profilePopover.contains(event.target)) {
+            return;
+        }
+
+        if (profilePopover && profilePopover.classList.contains('is-open')) {
+            setPopoverOpen(false);
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && profilePopover && profilePopover.classList.contains('is-open')) {
+            setPopoverOpen(false);
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (profilePopover && profilePopover.classList.contains('is-open') && activeProfileAnchor) {
+            positionPopover(activeProfileAnchor.getBoundingClientRect());
+        }
     });
 
     document.getElementById('blackboard-tab').style.display = 'none';
