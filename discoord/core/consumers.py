@@ -172,10 +172,10 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def create_blackboard_note(self, chat_group, user, text):
-        BlackboardNote.objects.create(group=chat_group, author=user, content=text)
+        BlackboardNote.objects.create(group=chat_group, updater=user, content=text)
         blackboard_notes = (
             BlackboardNote.objects.filter(group=chat_group)
-            .select_related('author')
+            .select_related('updater')
             .order_by('-pinned', '-updated_at')[:20]
         )
         return render_to_string(

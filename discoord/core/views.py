@@ -82,7 +82,7 @@ def room_view(request, slug=None):
         }
         blackboard_notes = (
             BlackboardNote.objects.filter(group=active_group)
-            .select_related('author')
+            .select_related('updater')
             .order_by('-pinned', '-updated_at')[:20]
         )
         online_member_ids = get_online_member_ids(active_group.slug)
@@ -157,7 +157,7 @@ def group_blackboard_fragment(request, slug):
     group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
     blackboard_notes = (
         BlackboardNote.objects.filter(group=group)
-        .select_related('author')
+        .select_related('updater')
         .order_by('-pinned', '-updated_at')[:20]
     )
     return render(request, 'partials/blackboard_notes.html', {
@@ -170,8 +170,6 @@ def group_blackboard_fragment(request, slug):
 def group_blackboard_note_edit(request, slug, note_id):
     group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
     note = get_object_or_404(BlackboardNote, pk=note_id, group=group)
-    if note.author != request.user:
-        return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
     return render(request, 'partials/blackboard_note_edit.html', {
         'note': note,
         'active_group': group,
@@ -185,19 +183,18 @@ def update_blackboard_note_view(request, slug, note_id):
 
     group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
     note = get_object_or_404(BlackboardNote, pk=note_id, group=group)
-    if note.author != request.user:
-        return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
 
     content = (request.POST.get('content') or '').strip()
     if not content:
         return JsonResponse({'ok': False, 'error': 'Note cannot be empty'}, status=400)
 
     note.content = content
+    note.updater = request.user
     note.save()
 
     blackboard_notes = (
         BlackboardNote.objects.filter(group=group)
-        .select_related('author')
+        .select_related('updater')
         .order_by('-pinned', '-updated_at')[:20]
     )
 
@@ -216,13 +213,11 @@ def delete_blackboard_note_view(request, slug, note_id):
 
     group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
     note = get_object_or_404(BlackboardNote, pk=note_id, group=group)
-    if note.author != request.user:
-        return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
 
     note.delete()
     blackboard_notes = (
         BlackboardNote.objects.filter(group=group)
-        .select_related('author')
+        .select_related('updater')
         .order_by('-pinned', '-updated_at')[:20]
     )
 
@@ -244,10 +239,10 @@ def create_blackboard_note_view(request, slug):
     if not content:
         return JsonResponse({'ok': False, 'error': 'Note cannot be empty'}, status=400)
 
-    BlackboardNote.objects.create(group=group, author=request.user, content=content)
+    BlackboardNote.objects.create(group=group, updater=request.user, content=content)
     blackboard_notes = (
         BlackboardNote.objects.filter(group=group)
-        .select_related('author')
+        .select_related('updater')
         .order_by('-pinned', '-updated_at')[:20]
     )
 

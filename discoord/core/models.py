@@ -81,7 +81,7 @@ class BlackboardNote(models.Model):
 		on_delete=models.CASCADE,
 		related_name='blackboard_notes',
 	)
-	author = models.ForeignKey(
+	updater = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.CASCADE,
 		related_name='blackboard_notes',
@@ -95,7 +95,7 @@ class BlackboardNote(models.Model):
 		ordering = ['-pinned', '-updated_at']
 
 	def __str__(self):
-		return f'Note by {self.author} in {self.group}'
+		return f'Note by {self.updater} in {self.group}'
 
 
 class UserProfile(models.Model):

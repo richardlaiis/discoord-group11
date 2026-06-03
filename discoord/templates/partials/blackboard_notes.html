@@ -2,11 +2,10 @@
     {% for note in blackboard_notes %}
     <div class="sticky-note{% if note.pinned %} sticky-note-pinned{% endif %}" id="note-{{ note.id }}">
         <div class="sticky-note-header">
-            {{ note.author.username }} · {{ note.created_at|date:'H:i' }}
+            {{ note.updater.username }} · {{ note.updated_at|date:'H:i' }}
             {% if note.pinned %} · Pinned{% endif %}
         </div>
         <div class="sticky-note-content">{{ note.content|linebreaksbr }}</div>
-        {% if request.user == note.author %}
         <div class="sticky-note-actions">
             <button class="action-btn" type="button"
                     hx-get="{% url 'group_blackboard_note_edit' active_group.slug note.id %}"
@@ -24,7 +23,6 @@
                 </button>
             </form>
         </div>
-        {% endif %}
     </div>
     {% endfor %}
 {% else %}
