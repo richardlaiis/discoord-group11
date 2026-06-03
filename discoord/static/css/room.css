@@ -463,6 +463,8 @@
   top: 0;
   left: 0;
   width: 280px;
+  max-height: 90vh;
+  overflow-y: auto;
   padding: 14px;
   border-radius: 16px;
   background: rgba(12, 16, 23, 0.95);
@@ -586,6 +588,8 @@
   margin-top: 12px;
   display: grid;
   gap: 10px;
+  max-height: calc(80vh - 120px);
+  overflow-y: auto;
 }
 
 .profile-input {
@@ -609,6 +613,8 @@
 
 .profile-input textarea {
   resize: vertical;
+  max-height: 80px;
+  min-height: 60px;
 }
 
 .profile-save-btn {

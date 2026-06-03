@@ -406,11 +406,11 @@
             }
             const avatar = row.querySelector('.avatar');
             if (avatar) {
-                avatar.childNodes.forEach((node) => {
-                    if (node.nodeType === Node.TEXT_NODE) {
-                        node.textContent = safeName.charAt(0).toUpperCase();
-                    }
-                });
+                // Clear all child nodes and set only the first letter
+                while (avatar.firstChild) {
+                    avatar.removeChild(avatar.firstChild);
+                }
+                avatar.textContent = safeName.charAt(0).toUpperCase();
             }
         });
 
@@ -687,6 +687,12 @@
         profileEditBtn.addEventListener('click', () => {
             profileEditMode = true;
             renderProfile(activeProfileData);
+            // 重新定位 popover，因為表單顯示後高度改變
+            if (activeProfileAnchor) {
+                setTimeout(() => {
+                    positionPopover(activeProfileAnchor.getBoundingClientRect());
+                }, 50);
+            }
         });
 
         profileEditForm.addEventListener('submit', (event) => {
@@ -718,6 +724,12 @@
                 activeProfileData = payload.profile;
                 profileEditMode = false;
                 renderProfile(activeProfileData);
+                // 切換回檢視模式後重新定位
+                if (activeProfileAnchor) {
+                    setTimeout(() => {
+                        positionPopover(activeProfileAnchor.getBoundingClientRect());
+                    }, 50);
+                }
             }).catch(() => {
                 // Keep edit mode if save fails.
             });
