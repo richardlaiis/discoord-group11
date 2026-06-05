@@ -9,6 +9,7 @@ class ChatGroup(models.Model):
 	name = models.CharField(max_length=120)
 	slug = models.SlugField(max_length=140, unique=True, blank=True)
 	invite_code = models.CharField(max_length=12, unique=True, blank=True, editable=False)
+	is_dm = models.BooleanField(default=False)
 	owner = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
 		on_delete=models.CASCADE,

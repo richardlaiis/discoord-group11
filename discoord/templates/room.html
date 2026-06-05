@@ -73,6 +73,29 @@
                     {% endfor %}
                 </div>
             </div>
+
+            <div class="sidebar-section sidebar-scroll-area">
+                <h3>Direct Messages</h3>
+                <div class="group-list">
+                    {% for dm in dms %}
+                    <a class="group-link {% if active_group and dm.pk == active_group.pk %}active{% endif %}" href="{% url 'room_group' dm.slug %}">
+                        <div class="user-item">
+                            <div class="avatar" style="background: var(--accent-secondary);">{{ dm.other_member.username|first|upper }}</div>
+                            <div class="user-info">
+                                <span class="user-name">{{ dm.other_member.username|default:"Unknown" }}</span>
+                                {% if active_group and dm.pk == active_group.pk %}
+                                <div class="group-meta">
+                                    <span class="group-code">Active</span>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </a>
+                    {% empty %}
+                    <div class="empty-state">No direct messages yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
 
         <div id="sidebar-room" class="sidebar-tab-panel" style="display: none;">
@@ -80,8 +103,15 @@
                 <h3>Current Group</h3>
                 <div class="current-room-info">
                     <div class="current-room-top">
-                        <div class="room-name">{{ active_group.name|default:"No active group" }}</div>
-                        <div class="room-code">{% if active_group %}{{ active_group.invite_code }}{% else %}—{% endif %}</div>
+                        <div class="room-name">{% if active_group.is_dm %}DM{% else %}{{ active_group.name|default:"No active group" }}{% endif %}</div>
+                        <div class="room-code" style="display: flex; align-items: center; gap: 4px;">
+                            <span>{% if active_group and not active_group.is_dm %}{{ active_group.invite_code }}{% else %}—{% endif %}</span>
+                            {% if active_group and not active_group.is_dm %}
+                            <button class="icon-btn" type="button" title="Copy Invite Code" onclick="navigator.clipboard.writeText('{{ active_group.invite_code }}'); this.querySelector('.material-symbols-outlined').textContent='check'; setTimeout(() => this.querySelector('.material-symbols-outlined').textContent='content_copy', 2000);" style="padding: 2px;">
+                                <span class="material-symbols-outlined" style="font-size: 1rem;">content_copy</span>
+                            </button>
+                            {% endif %}
+                        </div>
                     </div>
                     <div class="current-room-bottom">
                         <div id="room-online-count" class="room-members" data-total="{{ members|length }}">{{ online_member_ids|length }}/{{ members|length }} online</div>
@@ -211,6 +241,12 @@
             <div class="profile-actions" id="profile-actions" style="display: none;">
                 <button class="profile-edit-btn" id="profile-edit-btn" type="button">Edit profile</button>
             </div>
+            <div class="profile-actions" id="profile-actions-other" style="display: none;">
+                <form id="profile-dm-form" method="post" action="">
+                    {% csrf_token %}
+                    <button class="profile-edit-btn" id="profile-dm-btn" type="submit">Message</button>
+                </form>
+            </div>
         </div>
 
         {# Group summary moved to sidebar - no main summary shown #}
@@ -327,6 +363,8 @@
     const profileEditForm = document.getElementById('profile-edit-form');
     const profileEditBtn = document.getElementById('profile-edit-btn');
     const profileActions = document.getElementById('profile-actions');
+    const profileActionsOther = document.getElementById('profile-actions-other');
+    const profileDmForm = document.getElementById('profile-dm-form');
     const profileCloseBtn = document.getElementById('profile-close-btn');
     let activeProfileUserId = null;
     let activeProfileAnchor = null;
@@ -466,6 +504,12 @@
         const isSelf = Boolean(profile.is_self);
         if (profileActions) {
             profileActions.style.display = isSelf ? 'flex' : 'none';
+        }
+        if (profileActionsOther) {
+            profileActionsOther.style.display = isSelf ? 'none' : 'flex';
+            if (!isSelf && profileDmForm) {
+                profileDmForm.action = `/dm/${profile.user_id}/`;
+            }
         }
         if (profileEditForm) {
             profileEditForm.style.display = isSelf && profileEditMode ? 'grid' : 'none';

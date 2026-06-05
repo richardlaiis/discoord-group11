@@ -54,12 +54,17 @@ def _broadcast_blackboard_update(group, blackboard_notes):
 
 @login_required
 def room_view(request, slug=None):
-    groups = (
+    all_groups = (
         ChatGroup.objects.filter(members=request.user)
         .prefetch_related('members')
         .select_related('owner')
     )
-    active_group = _resolve_active_group(request, groups, slug=slug)
+    groups = all_groups.filter(is_dm=False)
+    dms = []
+    for dm in all_groups.filter(is_dm=True):
+        dm.other_member = dm.members.exclude(id=request.user.id).first()
+        dms.append(dm)
+    active_group = _resolve_active_group(request, all_groups, slug=slug)
     chat_messages = []
     members = []
     room_members = []
@@ -121,7 +126,9 @@ def room_view(request, slug=None):
         member_cards = []
 
     context = {
+        'all_groups': all_groups,
         'groups': groups,
+        'dms': dms,
         'active_group': active_group,
         'chat_messages': chat_messages,
         'members': members,
@@ -455,3 +462,25 @@ def group_member_profile_view(request, slug, user_id):
             },
         }
     )
+
+@login_required
+def start_dm_view(request, user_id):
+    if request.method != 'POST':
+        return redirect('room')
+
+    if user_id == request.user.id:
+        return redirect('room')
+
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    target_user = get_object_or_404(User, pk=user_id)
+
+    existing_dm = ChatGroup.objects.filter(is_dm=True, members=request.user).filter(members=target_user).first()
+    if existing_dm:
+        request.session['active_group_slug'] = existing_dm.slug
+        return redirect('room_group', slug=existing_dm.slug)
+
+    dm = ChatGroup.objects.create(name=f"DM", is_dm=True, owner=request.user)
+    dm.members.add(request.user, target_user)
+    request.session['active_group_slug'] = dm.slug
+    return redirect('room_group', slug=dm.slug)

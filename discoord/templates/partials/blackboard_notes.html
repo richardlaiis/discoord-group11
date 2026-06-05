@@ -1,3 +1,4 @@
+{% load markdown_extras %}
 {% if blackboard_notes %}
     {% for note in blackboard_notes %}
     <div class="sticky-note{% if note.pinned %} sticky-note-pinned{% endif %}" id="note-{{ note.id }}">
@@ -5,7 +6,7 @@
             {{ note.updater.username }} · {{ note.updated_at|date:'H:i' }}
             {% if note.pinned %} · Pinned{% endif %}
         </div>
-        <div class="sticky-note-content">{{ note.content|linebreaksbr }}</div>
+        <div class="sticky-note-content markdown-body">{{ note.content|render_markdown }}</div>
         <div class="sticky-note-actions">
             <button class="action-btn" type="button"
                     hx-get="{% url 'group_blackboard_note_edit' active_group.slug note.id %}"
