@@ -197,7 +197,8 @@ function drawAvatarForElement(avatar) {
     // draw body and hands oriented towards ang (hands placed in front)
     const cx = size / 2;
     const cy = size / 2;
-    const bodyR = Math.min(size, size) * 0.34;
+    // shrink body by additional 10%
+    const bodyR = Math.min(size, size) * 0.34 * 0.9;
     // skin and stroke
     const skin = getComputedStyle(document.documentElement).getPropertyValue('--avatar-skin') || '#f1c27d';
     ctx.save();
@@ -210,19 +211,28 @@ function drawAvatarForElement(avatar) {
     const handR = bodyR * 0.22;
     const handOffsetX = bodyR * 0.95; // near the body
     const handOffsetY = bodyR * 0.42;
+    const sepDeg = 10; // separation angle increase in degrees
+    const sep = (sepDeg * Math.PI) / 180;
+    function rotatePoint(x, y, theta) {
+        const c = Math.cos(theta);
+        const s = Math.sin(theta);
+        return { x: x * c - y * s, y: x * s + y * c };
+    }
 
-    // left hand (slightly up)
+    // left hand (upper) rotated outward by -sep
+    const p1 = rotatePoint(handOffsetX, -handOffsetY, -sep);
     ctx.beginPath();
     ctx.fillStyle = skin.trim();
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 2;
-    ctx.arc(handOffsetX, -handOffsetY, handR, 0, Math.PI * 2);
+    ctx.arc(p1.x, p1.y, handR, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // right hand (slightly down)
+    // right hand (lower) rotated outward by +sep
+    const p2 = rotatePoint(handOffsetX, handOffsetY, sep);
     ctx.beginPath();
-    ctx.arc(handOffsetX, handOffsetY, handR, 0, Math.PI * 2);
+    ctx.arc(p2.x, p2.y, handR, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
