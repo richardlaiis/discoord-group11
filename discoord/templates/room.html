@@ -173,6 +173,7 @@
     </button>
 
     <main class="main-area">
+        <canvas id="background-canvas" class="background-canvas" aria-hidden="true"></canvas>
         {% if room_members %}
             {% for member in room_members %}
             <div
@@ -269,11 +270,7 @@
 
         {# Group summary moved to sidebar - no main summary shown #}
 
-        <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 30px; backdrop-filter: blur(10px); border: 1px solid var(--border-color);">
-            <button class="icon-btn" type="button" title="Emote"><span class="material-symbols-outlined">mood</span></button>
-            <button class="icon-btn active" type="button" title="Move Mode"><span class="material-symbols-outlined">pan_tool</span></button>
-            <button class="icon-btn" type="button" title="Poke"><span class="material-symbols-outlined">touch_app</span></button>
-        </div>
+        <!-- bottom action buttons removed per UI request -->
     </main>
 
     <div id="dm-overlay" class="dm-overlay" aria-hidden="true">

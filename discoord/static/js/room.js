@@ -67,8 +67,9 @@ function ensureAvatarElement(userId, username) {
         avatar = document.createElement('div');
         avatar.className = 'space-avatar member-avatar';
         avatar.dataset.userId = String(userId);
-        avatar.style.left = '50%';
-        avatar.style.top = '50%';
+        // default to viewport center (will be adjusted to percent positions when available)
+        avatar.style.left = `${Math.floor(window.innerWidth/2)}px`;
+        avatar.style.top = `${Math.floor(window.innerHeight/2)}px`;
         mainArea.prepend(avatar);
     }
 
@@ -82,7 +83,44 @@ function ensureAvatarElement(userId, username) {
     avatarByUserId.set(Number(userId), avatar);
     // ensure canvas is created for the avatar
     ensureAvatarCanvas(avatar);
+    // if element has percent-based inline style from server, convert to viewport pixels
+    const leftStyle = avatar.getAttribute('style') || '';
+    const mLeft = leftStyle.match(/left:\s*([0-9\.]+)%/);
+    const mTop = leftStyle.match(/top:\s*([0-9\.]+)%/);
+    if (mLeft && mTop) {
+        setAvatarPosFromPercent(avatar, Number(mLeft[1]), Number(mTop[1]));
+    }
     return avatar;
+}
+
+function setAvatarPosFromPercent(avatar, pctX, pctY) {
+    // compute canvas area excluding right panel
+    const rightPanel = document.querySelector('.right-panel');
+    const rightWidth = rightPanel ? Math.floor(rightPanel.getBoundingClientRect().width) : 0;
+    const canvasLeft = 0;
+    const canvasWidth = Math.max(300, Math.floor(window.innerWidth - rightWidth - canvasLeft));
+    const canvasHeight = Math.max(300, Math.floor(window.innerHeight));
+    const px = Math.round(canvasLeft + (canvasWidth * (Number(pctX) / 100)));
+    const py = Math.round((canvasHeight * (Number(pctY) / 100)));
+    avatar.style.left = `${px}px`;
+    avatar.style.top = `${py}px`;
+    // persist percent for future layout changes
+    avatar.dataset.percentLeft = String(Number(pctX));
+    avatar.dataset.percentTop = String(Number(pctY));
+    // update z-index relative to sidebar overlap
+    updateAvatarZIndex(avatar, px);
+}
+
+function updateAvatarZIndex(avatar, px) {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    const sbRect = sidebar.getBoundingClientRect();
+    // if avatar lies under the sidebar area, place it below sidebar
+    if (px < Math.ceil(sbRect.right)) {
+        avatar.style.zIndex = '4';
+    } else {
+        avatar.style.zIndex = '20';
+    }
 }
 
 function ensureAvatarCanvas(avatar) {
@@ -138,6 +176,8 @@ function ensureAvatarCanvas(avatar) {
 
 let lastMousePos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 let pendingFrame = false;
+// background canvas anchor left (captured at first layout) so sidebar changes won't move it
+let bgInitialLeft = null;
 
 function onGlobalMouseMove(e) {
     lastMousePos = { x: e.clientX, y: e.clientY };
@@ -542,11 +582,8 @@ function applyMemberState(memberState) {
         return;
     }
 
-    if (typeof memberState.x === 'number') {
-        avatar.style.left = `${memberState.x}%`;
-    }
-    if (typeof memberState.y === 'number') {
-        avatar.style.top = `${memberState.y}%`;
+    if (typeof memberState.x === 'number' && typeof memberState.y === 'number') {
+        setAvatarPosFromPercent(avatar, Number(memberState.x), Number(memberState.y));
     }
 
     const speed = Math.hypot(Number(memberState.vx || 0), Number(memberState.vy || 0));
@@ -1380,6 +1417,193 @@ document.body.addEventListener('htmx:afterSwap', (event) => {
     }
 });
 
+// Background canvas: draw cafe-office 2D scene (white wooden floor, long table, sofa, tea area)
+function ensureBackgroundCanvas() {
+    const main = document.querySelector('.main-area');
+    if (!main) return null;
+    const canvas = document.getElementById('background-canvas');
+    if (!canvas) return null;
+    const dpr = devicePixelRatio || 1;
+
+    // capture initial left offset of main area on first run so sidebar toggles won't affect it
+    const mainRect = main.getBoundingClientRect();
+    if (bgInitialLeft === null) {
+        bgInitialLeft = Math.max(0, Math.floor(mainRect.left));
+    }
+
+    // compute right-panel width to exclude chat column
+    const rightPanel = document.querySelector('.right-panel');
+    const rightWidth = rightPanel ? Math.floor(rightPanel.getBoundingClientRect().width) : 0;
+
+    // keep canvas anchored to the initial main-area left so furniture never moves
+    const canvasLeft = (bgInitialLeft || 0);
+    const canvasTop = 0;
+    const canvasWidth = Math.max(300, Math.floor(window.innerWidth - rightWidth - canvasLeft));
+    const canvasHeight = Math.max(300, Math.floor(window.innerHeight));
+
+    canvas.style.left = `${canvasLeft}px`;
+    canvas.style.top = `${canvasTop}px`;
+    canvas.style.width = `${canvasWidth}px`;
+    canvas.style.height = `${canvasHeight}px`;
+
+    canvas.width = Math.floor(canvasWidth * dpr);
+    canvas.height = Math.floor(canvasHeight * dpr);
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    // compute scene left padding: use the initial main-area left captured on first run
+    // this keeps furniture fixed relative to the initial layout so it won't move when sidebar toggles
+    const sceneLeftPadding = bgInitialLeft || 0;
+    drawCafeOfficeBackground(ctx, canvasWidth, canvasHeight, sceneLeftPadding);
+    return canvas;
+}
+
+function drawCafeOfficeBackground(ctx, width, height, offsetX = 0) {
+    // clear
+    ctx.clearRect(0, 0, width, height);
+
+    // white wooden floor base
+    ctx.fillStyle = '#fbfbfa';
+    ctx.fillRect(0, 0, width, height);
+
+    // draw subtle wood planks horizontally
+    const plankH = 40;
+    ctx.lineWidth = 1;
+    for (let y = 0; y < height; y += plankH) {
+        // stagger slightly to look natural
+        const offset = (y / plankH) % 2 === 0 ? 0 : 8;
+        ctx.fillStyle = 'rgba(0,0,0,0.02)';
+        ctx.fillRect(0, y + plankH - 2, width, 2);
+        // occasional knots
+        for (let k = 0; k < Math.floor(width / 300); k++) {
+            const kx = ((k * 137) % width) + offset;
+            const ky = y + Math.random() * (plankH - 20) + 10;
+            ctx.fillStyle = 'rgba(0,0,0,0.03)';
+            ctx.fillRect(kx, ky, 6, 2);
+        }
+    }
+
+    // central long table (draw within interior area that excludes left offset)
+    const interiorX = offsetX;
+    const interiorW = Math.max(100, width - offsetX);
+    const tableW = Math.min(interiorW * 0.8, interiorW - 80);
+    const tableH = Math.max(60, height * 0.12);
+    const tableX = interiorX + (interiorW - tableW) / 2;
+    const tableY = (height - tableH) / 2 - 20;
+    roundRect(ctx, tableX, tableY, tableW, tableH, 12, '#d6b089', '#9b6f4d');
+    // table legs (simple shadows)
+    const legW = 12;
+    const legH = 34;
+    const legOffsetX = 24;
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.fillRect(tableX + legOffsetX, tableY + tableH - 4, legW, legH);
+    ctx.fillRect(tableX + tableW - legOffsetX - legW, tableY + tableH - 4, legW, legH);
+
+    // gray sofa near bottom
+    const sofaW = Math.min(interiorW * 0.6, interiorW - 120);
+    const sofaH = Math.max(48, height * 0.10);
+    const sofaX = interiorX + (interiorW - sofaW) / 2;
+    const sofaY = height - sofaH - 30;
+    roundRect(ctx, sofaX, sofaY, sofaW, sofaH, 14, '#9aa0a6', '#6f757a');
+    // cushions
+    const cushionCount = 3;
+    const cushionW = (sofaW - (cushionCount + 1) * 12) / cushionCount;
+    for (let i = 0; i < cushionCount; i++) {
+        const cx = sofaX + 12 + i * (cushionW + 12);
+        const cy = sofaY + 8;
+        roundRect(ctx, cx, cy, cushionW, sofaH - 16, 8, '#a7adb1', '#7f8589');
+    }
+
+    // tea/water area at north (top)
+    const counterW = Math.min(interiorW * 0.5, interiorW - 200);
+    const counterH = Math.max(40, height * 0.08);
+    const counterX = interiorX + (interiorW - counterW) / 2;
+    const counterY = 24;
+    roundRect(ctx, counterX, counterY, counterW, counterH, 8, '#ececec', '#cfcfcf');
+    // coffee machine
+    const machineW = 34;
+    const machineH = counterH - 12;
+    const machineX = counterX + 12;
+    const machineY = counterY + 6;
+    roundRect(ctx, machineX, machineY, machineW, machineH, 6, '#2b2b2b', '#111');
+    // kettle / cups
+    ctx.fillStyle = '#d1b48b';
+    ctx.beginPath();
+    ctx.arc(counterX + counterW - 48, counterY + counterH / 2, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(counterX + counterW - 24, counterY + counterH / 2, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // subtle vignette to frame the scene
+    const grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, 'rgba(0,0,0,0.02)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.03)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+}
+
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+    if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fill();
+    }
+    if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+}
+
+// initialize background canvas on load and resize
+window.addEventListener('load', () => ensureBackgroundCanvas());
+window.addEventListener('resize', () => ensureBackgroundCanvas());
+
+// observe sidebar collapse/expand so background and avatars update
+(function watchSidebarChanges() {
+    const app = document.querySelector('.app-container');
+    if (!app) return;
+    const obs = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            if (m.attributeName === 'class') {
+                // when sidebar toggles, keep the initial bgInitialLeft (furniture fixed)
+                const main = document.querySelector('.main-area');
+                if (!main) continue;
+                const mainRect = main.getBoundingClientRect();
+                // only set bgInitialLeft if it hasn't been captured yet
+                if (bgInitialLeft === null) {
+                    bgInitialLeft = Math.max(0, Math.floor(mainRect.left));
+                }
+                ensureBackgroundCanvas();
+                // reposition all avatars according to new canvas extents
+                avatarByUserId.forEach((av, uid) => {
+                    const leftAttr = av.dataset.percentLeft;
+                    const topAttr = av.dataset.percentTop;
+                    if (typeof leftAttr !== 'undefined' && typeof topAttr !== 'undefined') {
+                        const pLeft = Number(leftAttr);
+                        const pTop = Number(topAttr);
+                        if (!Number.isNaN(pLeft) && !Number.isNaN(pTop)) {
+                            setAvatarPosFromPercent(av, pLeft, pTop);
+                        }
+                    }
+                });
+            }
+        }
+    });
+    obs.observe(app, { attributes: true, attributeFilter: ['class'] });
+})();
+
 // Sidebar collapse / expand and tab switching
 (function() {
     const app = document.querySelector('.app-container');
@@ -1389,10 +1613,27 @@ document.body.addEventListener('htmx:afterSwap', (event) => {
     if (!app || !sidebar || !collapseBtn || !expandBtn) return;
 
     function setCollapsed(collapsed) {
+            // while sidebar is sliding, keep avatars below sidebar so the sidebar covers them
+            avatarByUserId.forEach((av) => { av.style.zIndex = '4'; });
         sidebar.classList.toggle('collapsed', collapsed);
         app.classList.toggle('sidebar-collapsed', collapsed);
         expandBtn.style.display = collapsed ? 'inline-flex' : 'none';
         try { localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0'); } catch (e) {}
+        // wait for sidebar transition to finish then restore avatar z-indexes and redraw
+        const handleTransitionEnd = (ev) => {
+            if (ev.target !== sidebar) return;
+            sidebar.removeEventListener('transitionend', handleTransitionEnd);
+            ensureBackgroundCanvas();
+            // recompute avatar z-index according to their position
+            avatarByUserId.forEach((av) => {
+                const pctL = av.dataset.percentLeft;
+                const pctT = av.dataset.percentTop;
+                if (typeof pctL !== 'undefined' && typeof pctT !== 'undefined') {
+                    setAvatarPosFromPercent(av, Number(pctL), Number(pctT));
+                }
+            });
+        };
+        sidebar.addEventListener('transitionend', handleTransitionEnd);
     }
 
     collapseBtn.addEventListener('click', () => setCollapsed(true));

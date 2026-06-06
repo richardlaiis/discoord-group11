@@ -17,6 +17,7 @@
   position: relative;
   transform: translateX(0);
   transition: transform 280ms cubic-bezier(.22,.9,.12,1), width 280ms cubic-bezier(.22,.9,.12,1), padding 200ms ease;
+  z-index: 5; /* overlay above background canvas */
 }
 
 /* Collapsed state: slide out to the left */
@@ -130,7 +131,7 @@
 /* Keep user profile bar pinned to bottom */
 .sidebar .user-profile-bar {
   margin-top: auto;
-  z-index: 10;
+  z-index: 20;
 }
 
 /* Current room simplified layout */
@@ -424,7 +425,7 @@ a.group-link > .dm-badge {
 }
 
 .space-avatar {
-  position: absolute;
+  position: fixed;
   width: 46px;
   height: 46px;
   border-radius: 999px;
@@ -435,6 +436,7 @@ a.group-link > .dm-badge {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
   animation: float 5s ease-in-out infinite;
   transform: translate(-50%, -50%);
+  z-index: 10;
 }
 
 .space-avatar.is-online {
@@ -548,6 +550,21 @@ a.group-link > .dm-badge {
   background: #ef4444;
   color: #fff;
 }
+
+/* Background canvas for cafe-office scene */
+.main-area {
+  position: relative;
+}
+.background-canvas {
+  position: fixed;
+  top: 0;
+  left: 0; /* overridden by JS to anchor to main area initial left */
+  height: 100vh;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+/* avatars are fixed in viewport so sidebar changes won't move them */
 
 .profile-avatar {
   width: 42px;
