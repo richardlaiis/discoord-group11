@@ -495,6 +495,60 @@ a.group-link > .dm-badge {
   gap: 10px;
 }
 
+.skin-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.skin-swatch {
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+}
+
+/* Logout confirmation modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.45);
+  z-index: 120;
+}
+.modal {
+  background: var(--bg-color, #fff);
+  color: var(--text-color, #111);
+  padding: 18px;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  min-width: 320px;
+  max-width: 90%;
+}
+.modal-body p {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+.btn-secondary {
+  background: #f3f4f6;
+}
+.btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+
 .profile-avatar {
   width: 42px;
   height: 42px;

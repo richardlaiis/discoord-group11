@@ -117,6 +117,8 @@ class UserProfile(models.Model):
 	bio = models.TextField(max_length=240, blank=True)
 	status_text = models.CharField(max_length=120, blank=True)
 	status_mode = models.CharField(max_length=12, choices=STATUS_CHOICES, default='online')
+	# avatar skin color in hex (e.g. #facc15)
+	skin = models.CharField(max_length=7, blank=True, default='#facc15')
 	updated_at = models.DateTimeField(auto_now=True)
 
 	class Meta:

@@ -107,6 +107,7 @@ def room_view(request, slug=None):
                     'y',
                     memberships.get(member.id).position_y if memberships.get(member.id) else 50.0,
                 ),
+                'skin': (profiles_by_user_id.get(member.id).skin if profiles_by_user_id.get(member.id) else '') or '',
             }
             for member in members
         ]
@@ -422,6 +423,7 @@ def group_member_profile_view(request, slug, user_id):
                     'status_text': profile.status_text,
                     'status_mode': profile.status_mode,
                     'is_self': target_user.id == request.user.id,
+                    'skin': profile.skin,
                 },
             }
         )
@@ -445,7 +447,25 @@ def group_member_profile_view(request, slug, user_id):
     profile.bio = _clean_field(request.POST.get('bio'), 240)
     profile.status_text = _clean_field(request.POST.get('status_text'), 120)
     profile.status_mode = status_mode
+    # accept skin hex (basic validation)
+    skin_val = (request.POST.get('skin') or '').strip()
+    if skin_val and skin_val.startswith('#') and len(skin_val) in (4, 7):
+        profile.skin = skin_val
     profile.save()
+
+    # broadcast presence/state to group so other clients receive updated skin
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'chat_{group.slug}',
+            {
+                'type': 'presence.update',
+                'online_member_ids': list(get_online_member_ids(group.slug)),
+                'member_states': get_online_member_states(group.slug),
+            },
+        )
+    except Exception:
+        pass
 
     return JsonResponse(
         {
@@ -459,6 +479,7 @@ def group_member_profile_view(request, slug, user_id):
                 'status_text': profile.status_text,
                 'status_mode': profile.status_mode,
                 'is_self': True,
+                'skin': profile.skin,
             },
         }
     )

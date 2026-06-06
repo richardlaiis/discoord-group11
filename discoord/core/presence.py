@@ -4,6 +4,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from .models import ChatGroupMembership
+from .models import UserProfile
 
 
 PRESENCE_TIMEOUT = 120
@@ -179,15 +180,24 @@ def get_online_member_states(group_slug):
     if cleaned != presence:
         _store_presence(group_slug, cleaned)
 
+    # bulk-load profiles for skins to avoid per-user queries
+    user_ids = [int(uid) for uid in cleaned.keys()]
+    profiles = {
+        p.user_id: p
+        for p in UserProfile.objects.filter(user_id__in=user_ids).only('user_id', 'skin')
+    } if user_ids else {}
+
     states = {}
     for user_id, record in cleaned.items():
-        states[int(user_id)] = {
-            'user_id': int(user_id),
+        uid = int(user_id)
+        states[uid] = {
+            'user_id': uid,
             'username': record.get('username', ''),
             'x': _clamp(_to_float(record.get('x'), 50.0), POSITION_MIN, POSITION_MAX),
             'y': _clamp(_to_float(record.get('y'), 50.0), POSITION_MIN, POSITION_MAX),
             'vx': _to_float(record.get('vx'), 0.0),
             'vy': _to_float(record.get('vy'), 0.0),
+            'skin': (profiles.get(uid).skin if profiles.get(uid) else '') or '',
         }
     return states
 

@@ -28,6 +28,9 @@ const profileStatusText = document.getElementById('profile-status-text');
 const profileFields = document.getElementById('profile-fields');
 const profileEditForm = document.getElementById('profile-edit-form');
 const profileEditBtn = document.getElementById('profile-edit-btn');
+const profileSkinBtn = document.getElementById('profile-skin-btn');
+const profileSkinEditor = document.getElementById('profile-skin-editor');
+const skinPalette = document.getElementById('skin-palette');
 const profileActions = document.getElementById('profile-actions');
 const profileActionsOther = document.getElementById('profile-actions-other');
 const profileCloseBtn = document.getElementById('profile-close-btn');
@@ -199,8 +202,8 @@ function drawAvatarForElement(avatar) {
     const cy = size / 2;
     // shrink body by additional 10%
     const bodyR = Math.min(size, size) * 0.34 * 0.9;
-    // skin and stroke
-    const skin = getComputedStyle(document.documentElement).getPropertyValue('--avatar-skin') || '#f1c27d';
+    // skin and stroke - prefer per-avatar dataset.skin, fallback to yellow
+    const skin = (avatar.dataset.skin || '').trim() || '#facc15';
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(ang);
@@ -328,6 +331,8 @@ function renderProfile(profile) {
     }
     if (profileAvatar) {
         profileAvatar.textContent = displayName.charAt(0).toUpperCase();
+        // set profile avatar background to skin if provided, otherwise default yellow
+        profileAvatar.style.background = profile.skin || '#facc15';
     }
     if (profileStatusText) {
         profileStatusText.textContent = profile.status_text || 'No status set';
@@ -351,7 +356,8 @@ function renderProfile(profile) {
 
     const isSelf = Boolean(profile.is_self);
     if (profileActions) {
-        profileActions.style.display = isSelf ? 'flex' : 'none';
+        // hide actions while in edit mode
+        profileActions.style.display = (isSelf && !profileEditMode) ? 'flex' : 'none';
     }
     if (profileActionsOther) {
         profileActionsOther.style.display = isSelf ? 'none' : 'flex';
@@ -363,6 +369,103 @@ function renderProfile(profile) {
         profileFields.style.display = isSelf && profileEditMode ? 'none' : 'grid';
     }
     updateDisplayNameForUser(profile.user_id, profile.display_name, profile.username);
+    // apply skin to space avatar if provided
+    try {
+        const spaceAvatar = document.querySelector(`.space-avatar[data-user-id="${profile.user_id}"]`);
+        if (spaceAvatar && profile.skin) {
+            spaceAvatar.dataset.skin = profile.skin;
+            // redraw if canvas exists
+            const info = avatarCanvasByUserId.get(Number(spaceAvatar.dataset.userId));
+            if (info) drawAvatarForElement(spaceAvatar);
+        }
+    } catch (e) {}
+}
+
+// Among Us palette
+const AMONG_US_COLORS = [
+    '#ff4b4b', // red
+    '#3b82f6', // blue
+    '#10b981', // green
+    '#ff6bcb', // pink
+    '#fb923c', // orange
+    '#facc15', // yellow
+    '#111827', // black
+    '#f3f4f6', // white
+    '#8b5cf6', // purple
+    '#7c2d12', // brown
+    '#06b6d4', // cyan
+    '#84cc16', // lime
+    '#7f1d1d', // maroon
+    '#fb7185', // rose
+];
+
+function renderSkinPalette() {
+    if (!skinPalette) return;
+    skinPalette.innerHTML = '';
+    AMONG_US_COLORS.forEach((col) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'skin-swatch';
+        btn.style.width = '28px';
+        btn.style.height = '18px';
+        btn.style.margin = '4px';
+        btn.style.borderRadius = '6px';
+        btn.style.border = '1px solid rgba(0,0,0,0.2)';
+        btn.style.background = col;
+        btn.dataset.color = col;
+        btn.addEventListener('click', () => selectSkinColor(col));
+        skinPalette.appendChild(btn);
+    });
+}
+
+function selectSkinColor(color) {
+    if (!activeProfileUserId) return;
+    // optimistic local update
+    const myAvatar = document.querySelector(`.space-avatar[data-user-id="${currentUserId}"]`);
+    if (myAvatar) {
+        myAvatar.dataset.skin = color;
+        drawAvatarForElement(myAvatar);
+    }
+    if (profileAvatar) {
+        profileAvatar.style.background = color;
+    }
+
+    // persist to server if possible
+    const url = profileUrl(activeProfileUserId);
+    if (!url) return;
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: new URLSearchParams({ skin: color }),
+    }).then(async (r) => {
+        if (!r.ok) throw new Error('skin-save-failed');
+        const payload = await r.json();
+        if (payload && payload.profile) {
+            // update display with server value if returned
+            renderProfile(payload.profile);
+        }
+    }).catch(() => {
+        // ignore errors — local update remains
+    }).finally(() => {
+        // close editor after selection
+        if (profileSkinEditor) profileSkinEditor.style.display = 'none';
+    });
+}
+
+if (profileSkinBtn) {
+    profileSkinBtn.addEventListener('click', () => {
+        if (!profileSkinEditor) return;
+        const showing = profileSkinEditor.style.display === 'block';
+        if (!showing) {
+            renderSkinPalette();
+            profileSkinEditor.style.display = 'block';
+        } else {
+            profileSkinEditor.style.display = 'none';
+        }
+    });
 }
 
 function positionPopover(anchorRect) {
@@ -456,6 +559,9 @@ function applyMemberState(memberState) {
         } else {
             avatar.dataset.remoteVx = String(Number(memberState.vx || 0));
             avatar.dataset.remoteVy = String(Number(memberState.vy || 0));
+        }
+        if (typeof memberState.skin !== 'undefined') {
+            avatar.dataset.skin = String(memberState.skin || '');
         }
     }
     drawAvatarForElement(avatar);
@@ -908,6 +1014,41 @@ if (profileEditBtn && profileEditForm) {
         }).catch(() => {
             // Keep edit mode if save fails.
         });
+    });
+}
+
+// Logout confirmation modal logic
+const logoutForm = document.getElementById('logout-form');
+const logoutModal = document.getElementById('logout-confirm-modal');
+const logoutCancel = document.getElementById('logout-cancel');
+const logoutConfirm = document.getElementById('logout-confirm');
+if (logoutForm && logoutModal && logoutCancel && logoutConfirm) {
+    logoutForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        logoutModal.style.display = 'flex';
+        logoutModal.setAttribute('aria-hidden', 'false');
+        // focus cancel for safety
+        logoutCancel.focus();
+    });
+
+    logoutCancel.addEventListener('click', () => {
+        logoutModal.style.display = 'none';
+        logoutModal.setAttribute('aria-hidden', 'true');
+    });
+
+    logoutConfirm.addEventListener('click', () => {
+        // submit the form programmatically
+        logoutModal.style.display = 'none';
+        logoutModal.setAttribute('aria-hidden', 'true');
+        logoutForm.submit();
+    });
+
+    // close on escape
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && logoutModal.style.display === 'flex') {
+            logoutModal.style.display = 'none';
+            logoutModal.setAttribute('aria-hidden', 'true');
+        }
     });
 }
 
