@@ -43,12 +43,14 @@ const dmOverlayMessages = document.getElementById('dm-overlay-messages');
 const dmOverlayInput = document.getElementById('dm-overlay-input');
 const dmOverlaySend = document.getElementById('dm-overlay-send');
 const dmOverlayClose = document.getElementById('dm-overlay-close');
-let dmSocket = null;
-let currentDmSlug = null;
+const dmSockets = new Map();    // slug → WebSocket
+const dmPartnerIds = new Map(); // slug → partnerId
+const unreadCounts = new Map(); // partnerId → count
+let currentDmSlug = null;       // slug of the currently-open overlay (null = closed)
 
 function ensureAvatarElement(userId, username) {
     let avatar = avatarByUserId.get(userId);
-    if (avatar) {
+    if (avatar && document.contains(avatar)) {
         return avatar;
     }
 
@@ -538,8 +540,71 @@ function appendMessage(message) {
     messageList.closest('.chat-messages').scrollTop = messageList.closest('.chat-messages').scrollHeight;
 }
 
-function updatePresence(onlineMemberIds) {
+function addMemberToSidebar(userId, username) {
+    const groupList = document.querySelector('#sidebar-room .group-list');
+    if (!groupList) {
+        return;
+    }
+    if (groupList.querySelector(`.member-row[data-user-id="${userId}"]`)) {
+        return;
+    }
+
+    const row = document.createElement('div');
+    row.className = 'user-item member-row';
+    row.dataset.userId = String(userId);
+    row.dataset.username = username;
+    row.dataset.online = 'true';
+
+    const avatarEl = document.createElement('div');
+    avatarEl.className = 'avatar';
+    avatarEl.textContent = username.charAt(0).toUpperCase();
+
+    const dot = document.createElement('div');
+    dot.className = 'status-dot status-online';
+    avatarEl.appendChild(dot);
+
+    const userInfo = document.createElement('div');
+    userInfo.className = 'user-info';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'user-name';
+    nameSpan.textContent = username;
+
+    const pill = document.createElement('span');
+    pill.className = 'presence-pill online';
+    pill.textContent = 'Online';
+
+    userInfo.appendChild(nameSpan);
+    userInfo.appendChild(pill);
+    row.appendChild(avatarEl);
+    row.appendChild(userInfo);
+    groupList.appendChild(row);
+
+    const roomOnlineCount = document.getElementById('room-online-count');
+    if (roomOnlineCount) {
+        const prev = Number(roomOnlineCount.dataset.total) || 0;
+        roomOnlineCount.dataset.total = String(prev + 1);
+    }
+}
+
+function updatePresence(onlineMemberIds, memberStates) {
     const onlineIds = new Set(onlineMemberIds);
+
+    if (memberStates && Object.keys(memberStates).length > 0) {
+        const knownIds = new Set(
+            Array.from(document.querySelectorAll('#sidebar-room .member-row[data-user-id]'))
+                .map((r) => Number(r.dataset.userId))
+        );
+        onlineIds.forEach((id) => {
+            if (!knownIds.has(id)) {
+                const state = memberStates[id] || memberStates[String(id)] ||
+                    Object.values(memberStates).find((s) => Number(s.user_id) === id);
+                const username = (state && state.username) || `User ${id}`;
+                addMemberToSidebar(id, username);
+            }
+        });
+    }
+
     document.querySelectorAll('.member-row').forEach((row) => {
         const userId = Number(row.dataset.userId);
         const isOnline = onlineIds.has(userId);
@@ -614,15 +679,72 @@ function appendDmMessage(message) {
     dmOverlayMessages.scrollTop = dmOverlayMessages.scrollHeight;
 }
 
+function showUnreadBadge(partnerId, count) {
+    const label = count > 9 ? '9+' : String(count);
+
+    function upsertBadge(parent) {
+        if (!parent) return;
+        let badge = parent.querySelector(':scope > .dm-badge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.className = 'dm-badge';
+            parent.appendChild(badge);
+        }
+        badge.textContent = label;
+    }
+
+    // Place badge on the DM sidebar link itself (avoids overflow clipping from .group-list)
+    document.querySelectorAll(`a.group-link[data-partner-id="${partnerId}"]`).forEach(upsertBadge);
+
+    // Also badge the space-avatar if the partner happens to be in the same room
+    const spaceAvatar = document.querySelector(`.space-avatar[data-user-id="${partnerId}"]`);
+    upsertBadge(spaceAvatar);
+}
+
+function clearUnreadBadge(partnerId) {
+    unreadCounts.delete(partnerId);
+    document.querySelectorAll(
+        `a.group-link[data-partner-id="${partnerId}"] > .dm-badge,` +
+        `.space-avatar[data-user-id="${partnerId}"] > .dm-badge`
+    ).forEach((b) => b.remove());
+}
+
+function connectDmBackground(dmSlug, partnerId, partnerUsername) {
+    const existing = dmSockets.get(dmSlug);
+    if (existing && existing.readyState !== WebSocket.CLOSED && existing.readyState !== WebSocket.CLOSING) {
+        return;
+    }
+    const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${wsProto}://${window.location.host}/ws/chat/${dmSlug}/`);
+    dmSockets.set(dmSlug, ws);
+    dmPartnerIds.set(dmSlug, partnerId);
+
+    ws.addEventListener('message', (event) => {
+        let payload;
+        try { payload = JSON.parse(event.data); } catch { return; }
+        if (payload.type !== 'message') return;
+        const msg = payload.message;
+
+        if (currentDmSlug === dmSlug && dmOverlay && dmOverlay.classList.contains('is-open')) {
+            appendDmMessage(msg);
+            return;
+        }
+
+        if (msg.sender_id === currentUserId) return;
+
+        const count = (unreadCounts.get(partnerId) || 0) + 1;
+        unreadCounts.set(partnerId, count);
+        showUnreadBadge(partnerId, count);
+    });
+}
+
 function openDmOverlay(userId, username, dmSlug, initialMessages) {
     if (!dmOverlay) {
         return;
     }
-    if (dmSocket && currentDmSlug !== dmSlug) {
-        dmSocket.close();
-        dmSocket = null;
-    }
     currentDmSlug = dmSlug;
+    clearUnreadBadge(userId);
+
     if (dmOverlayAvatar) {
         dmOverlayAvatar.textContent = username.charAt(0).toUpperCase();
     }
@@ -635,16 +757,9 @@ function openDmOverlay(userId, username, dmSlug, initialMessages) {
     }
     dmOverlay.classList.add('is-open');
     dmOverlay.setAttribute('aria-hidden', 'false');
-    if (!dmSocket || dmSocket.readyState === WebSocket.CLOSED) {
-        const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        dmSocket = new WebSocket(`${wsProto}://${window.location.host}/ws/chat/${dmSlug}/`);
-        dmSocket.addEventListener('message', (event) => {
-            const payload = JSON.parse(event.data);
-            if (payload.type === 'message') {
-                appendDmMessage(payload.message);
-            }
-        });
-    }
+
+    connectDmBackground(dmSlug, userId, username);
+
     if (dmOverlayInput) {
         dmOverlayInput.focus();
     }
@@ -655,11 +770,8 @@ function closeDmOverlay() {
         dmOverlay.classList.remove('is-open');
         dmOverlay.setAttribute('aria-hidden', 'true');
     }
-    if (dmSocket) {
-        dmSocket.close();
-        dmSocket = null;
-    }
     currentDmSlug = null;
+    // Keep dmSockets alive for background notifications
 }
 
 function sendDmMessage() {
@@ -681,11 +793,16 @@ function sendDmMessage() {
         if (!response.ok) {
             throw new Error('dm-send-failed');
         }
+        const data = await response.json();
         dmOverlayInput.value = '';
         dmOverlayInput.focus();
+        if (data && data.message) {
+            appendDmMessage(data.message);
+        }
     }).catch(() => {
-        if (dmSocket && dmSocket.readyState === WebSocket.OPEN) {
-            dmSocket.send(JSON.stringify({ type: 'message', content }));
+        const ws = dmSockets.get(currentDmSlug);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'message', content }));
             dmOverlayInput.value = '';
             dmOverlayInput.focus();
         }
@@ -794,10 +911,10 @@ if (socket) {
         if (payload.type === 'message') {
             appendMessage(payload.message);
         } else if (payload.type === 'presence') {
-            updatePresence(payload.online_member_ids);
+            updatePresence(payload.online_member_ids, payload.member_states || {});
             syncMemberStates(payload.member_states || {});
         } else if (payload.type === 'state') {
-            updatePresence(payload.online_member_ids || []);
+            updatePresence(payload.online_member_ids || [], payload.member_states || {});
             syncMemberStates(payload.member_states || {});
         } else if (payload.type === 'motion') {
             applyMemberState(payload.member);
@@ -901,7 +1018,7 @@ function pollRoomState() {
         if (!payload || !payload.ok) {
             return;
         }
-        updatePresence(payload.online_member_ids || []);
+        updatePresence(payload.online_member_ids || [], payload.member_states || {});
         syncMemberStates(payload.member_states || {});
     }).catch(() => {
         // Keep polling even when request fails.
@@ -1031,6 +1148,31 @@ window.addEventListener('blur', () => {
 });
 
 document.addEventListener('click', (event) => {
+    // Intercept DM sidebar link clicks — open overlay instead of navigating
+    const dmLink = event.target.closest('a.group-link[data-dm-slug]');
+    if (dmLink) {
+        event.preventDefault();
+        const dmSlug = dmLink.dataset.dmSlug;
+        const partnerId = Number(dmLink.dataset.partnerId);
+        const partnerUsername = dmLink.dataset.partnerUsername || `User ${partnerId}`;
+        fetch(`/api/dm/${partnerId}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCsrfToken(),
+            },
+        }).then((r) => r.json()).then((payload) => {
+            if (!payload.ok) return;
+            openDmOverlay(
+                partnerId,
+                payload.target_username || partnerUsername,
+                payload.dm_slug || dmSlug,
+                payload.messages || []
+            );
+        }).catch(() => {});
+        return;
+    }
+
     const avatar = event.target.closest('.space-avatar[data-user-id], .member-row[data-user-id]');
     if (avatar) {
         const userId = Number(avatar.dataset.userId);
@@ -1063,6 +1205,17 @@ window.addEventListener('resize', () => {
 document.getElementById('blackboard-tab').style.display = 'none';
 initializeAvatars();
 movementTick();
+
+// Connect background WebSocket for every existing DM so we can receive
+// messages and show notification badges even before the overlay is opened.
+document.querySelectorAll('a.group-link[data-dm-slug]').forEach((link) => {
+    const dmSlug = link.dataset.dmSlug;
+    const partnerId = Number(link.dataset.partnerId);
+    const partnerUsername = link.dataset.partnerUsername || `User ${partnerId}`;
+    if (dmSlug && partnerId) {
+        connectDmBackground(dmSlug, partnerId, partnerUsername);
+    }
+});
 document.querySelectorAll('.member-row').forEach((row) => {
     row.dataset.online = row.dataset.online || 'false';
 });
