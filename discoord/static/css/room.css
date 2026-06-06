@@ -48,7 +48,7 @@
   justify-content: center;
   background: rgba(0,0,0,0.5);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: none;
 }
 
 /* When the container has collapsed sidebar, let main-area fill space */
@@ -423,19 +423,20 @@
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
   animation: float 5s ease-in-out infinite;
   transform: translate(-50%, -50%);
 }
 
 .space-avatar.is-online {
-  border-color: rgba(46, 204, 113, 0.45);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .space-avatar.is-self {
-  border-color: rgba(79, 140, 255, 0.7);
-  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.2), 0 12px 28px rgba(0, 0, 0, 0.24);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .space-avatar.is-moving {

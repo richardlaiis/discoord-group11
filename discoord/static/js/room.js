@@ -15,6 +15,7 @@ const KEY_TO_VECTOR = {
 
 const activeKeys = new Set();
 const avatarByUserId = new Map();
+const avatarCanvasByUserId = new Map();
 let moveRequestInFlight = false;
 let lastFallbackMoveAt = 0;
 let statePollHandle = null;
@@ -74,8 +75,166 @@ function ensureAvatarElement(userId, username) {
     }
 
     avatarByUserId.set(Number(userId), avatar);
+    // ensure canvas is created for the avatar
+    ensureAvatarCanvas(avatar);
     return avatar;
 }
+
+function ensureAvatarCanvas(avatar) {
+    try {
+        const userId = Number(avatar.dataset.userId || -1);
+        if (avatarCanvasByUserId.has(userId)) return avatarCanvasByUserId.get(userId);
+
+        // create canvas that fills the avatar element
+        const canvas = document.createElement('canvas');
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.display = 'block';
+        canvas.style.pointerEvents = 'none';
+        canvas.className = 'avatar-canvas';
+
+        // set default size via CSS-ish fallback
+
+        // canvas size (smaller overall avatar requested)
+        const size = 84;
+        const dpr = devicePixelRatio || 1;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        canvas.style.width = `${size}px`;
+        canvas.style.height = `${size}px`;
+        canvas.style.border = 'none';
+
+        avatar.style.width = `${size}px`;
+        avatar.style.height = `${size}px`;
+        avatar.style.display = 'flex';
+        avatar.style.flexDirection = 'column';
+        avatar.style.alignItems = 'center';
+        avatar.style.justifyContent = 'center';
+        avatar.style.borderRadius = '50%';
+        avatar.style.overflow = 'visible';
+
+        // preserve title attribute for external name display (via CSS ::after)
+        const titleText = avatar.dataset.username || avatar.getAttribute('title') || '';
+        // remove child nodes but keep attributes
+        while (avatar.firstChild) avatar.removeChild(avatar.firstChild);
+        avatar.title = titleText;
+        // append only the canvas; external name shown by CSS ::after
+        avatar.appendChild(canvas);
+
+        const ctx = canvas.getContext('2d');
+        avatarCanvasByUserId.set(userId, { canvas, ctx, size });
+        // initial draw
+        drawAvatarForElement(avatar);
+        return { canvas, ctx, size };
+    } catch (e) {
+        return null;
+    }
+}
+
+let lastMousePos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+let pendingFrame = false;
+
+function onGlobalMouseMove(e) {
+    lastMousePos = { x: e.clientX, y: e.clientY };
+    requestAvatarFrame();
+}
+
+function requestAvatarFrame() {
+    if (pendingFrame) return;
+    pendingFrame = true;
+    window.requestAnimationFrame(() => {
+        pendingFrame = false;
+        // only redraw the current user's avatar on mouse move
+        const selfAvatar = avatarByUserId.get(Number(currentUserId));
+        if (selfAvatar) drawAvatarForElement(selfAvatar);
+    });
+}
+
+function redrawAllAvatars() {
+    avatarByUserId.forEach((avatar, userId) => {
+        drawAvatarForElement(avatar);
+    });
+}
+
+function drawAvatarForElement(avatar) {
+    const userId = Number(avatar.dataset.userId || -1);
+    const info = avatarCanvasByUserId.get(userId);
+    if (!info) return;
+    const { canvas, ctx, size } = info;
+    // handle DPR
+    const dpr = devicePixelRatio || 1;
+    if (canvas.width !== size * dpr || canvas.height !== size * dpr) {
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+    }
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, size, size);
+
+    const rect = avatar.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    // determine angle: self uses mouse, others use remote angle from dataset or vx/vy
+    let ang = 0;
+    const uid = Number(avatar.dataset.userId || -1);
+    if (uid === Number(currentUserId)) {
+        ang = Math.atan2(lastMousePos.y - centerY, lastMousePos.x - centerX);
+    } else if (typeof avatar.dataset.remoteAngle !== 'undefined' && avatar.dataset.remoteAngle !== '') {
+        ang = Number(avatar.dataset.remoteAngle) || 0;
+    } else if (typeof avatar.dataset.remoteVx !== 'undefined' && typeof avatar.dataset.remoteVy !== 'undefined') {
+        const rvx = Number(avatar.dataset.remoteVx) || 0;
+        const rvy = Number(avatar.dataset.remoteVy) || 0;
+        if (rvx !== 0 || rvy !== 0) {
+            ang = Math.atan2(rvy, rvx);
+        }
+    } else {
+        ang = 0;
+    }
+
+    // draw body and hands oriented towards ang (hands placed in front)
+    const cx = size / 2;
+    const cy = size / 2;
+    const bodyR = Math.min(size, size) * 0.34;
+    // skin and stroke
+    const skin = getComputedStyle(document.documentElement).getPropertyValue('--avatar-skin') || '#f1c27d';
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+
+
+    // draw smaller hands and place them forward (positive X after rotation)
+    // hands closer to the body and slightly smaller
+    const handR = bodyR * 0.22;
+    const handOffsetX = bodyR * 0.95; // near the body
+    const handOffsetY = bodyR * 0.42;
+
+    // left hand (slightly up)
+    ctx.beginPath();
+    ctx.fillStyle = skin.trim();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.arc(handOffsetX, -handOffsetY, handR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // right hand (slightly down)
+    ctx.beginPath();
+    ctx.arc(handOffsetX, handOffsetY, handR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // draw body (center)
+    ctx.beginPath();
+    ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+// attach global mouse move
+document.addEventListener('mousemove', onGlobalMouseMove);
 
 function profileUrl(userId) {
     if (!activeGroupSlug) {
@@ -129,7 +288,11 @@ function updateDisplayNameForUser(userId, displayName, username) {
     if (spaceAvatar) {
         spaceAvatar.dataset.username = safeName;
         spaceAvatar.title = safeName;
-        spaceAvatar.textContent = safeName.charAt(0).toUpperCase();
+        // if avatar uses canvas, don't set inner text (avoid duplicate names)
+        const hasCanvas = Boolean(spaceAvatar.querySelector('canvas'));
+        if (!hasCanvas) {
+            spaceAvatar.textContent = safeName.charAt(0).toUpperCase();
+        }
     }
 
     if (Number(userId) === currentUserId) {
@@ -273,6 +436,17 @@ function applyMemberState(memberState) {
 
     const speed = Math.hypot(Number(memberState.vx || 0), Number(memberState.vy || 0));
     avatar.classList.toggle('is-moving', speed > 0.04);
+    // redraw avatar canvas to keep orientation consistent after movement
+    // store remote motion/angle for non-self avatars so draw uses WebSocket data
+    if (Number(userId) !== Number(currentUserId)) {
+        if (typeof memberState.angle !== 'undefined') {
+            avatar.dataset.remoteAngle = String(Number(memberState.angle));
+        } else {
+            avatar.dataset.remoteVx = String(Number(memberState.vx || 0));
+            avatar.dataset.remoteVy = String(Number(memberState.vy || 0));
+        }
+    }
+    drawAvatarForElement(avatar);
 }
 
 function syncMemberStates(memberStates) {
@@ -288,6 +462,8 @@ function initializeAvatars() {
         if (userId === currentUserId) {
             avatar.classList.add('is-self');
         }
+        // ensure canvas exists for avatars present on load
+        ensureAvatarCanvas(avatar);
     });
 }
 
