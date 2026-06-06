@@ -21,4 +21,5 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('register/', views.register_view, name='register'),
     path('dm/<int:user_id>/', views.start_dm_view, name='start_dm'),
+    path('api/dm/<int:user_id>/', views.get_or_create_dm_api, name='get_or_create_dm_api'),
 ]

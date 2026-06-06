@@ -29,12 +29,21 @@ const profileEditForm = document.getElementById('profile-edit-form');
 const profileEditBtn = document.getElementById('profile-edit-btn');
 const profileActions = document.getElementById('profile-actions');
 const profileActionsOther = document.getElementById('profile-actions-other');
-const profileDmForm = document.getElementById('profile-dm-form');
 const profileCloseBtn = document.getElementById('profile-close-btn');
 let activeProfileUserId = null;
 let activeProfileAnchor = null;
 let activeProfileData = null;
 let profileEditMode = false;
+
+const dmOverlay = document.getElementById('dm-overlay');
+const dmOverlayAvatar = document.getElementById('dm-overlay-avatar');
+const dmOverlayTitle = document.getElementById('dm-overlay-title');
+const dmOverlayMessages = document.getElementById('dm-overlay-messages');
+const dmOverlayInput = document.getElementById('dm-overlay-input');
+const dmOverlaySend = document.getElementById('dm-overlay-send');
+const dmOverlayClose = document.getElementById('dm-overlay-close');
+let dmSocket = null;
+let currentDmSlug = null;
 
 function ensureAvatarElement(userId, username) {
     let avatar = avatarByUserId.get(userId);
@@ -171,9 +180,6 @@ function renderProfile(profile) {
     }
     if (profileActionsOther) {
         profileActionsOther.style.display = isSelf ? 'none' : 'flex';
-        if (!isSelf && profileDmForm) {
-            profileDmForm.action = `/dm/${profile.user_id}/`;
-        }
     }
     if (profileEditForm) {
         profileEditForm.style.display = isSelf && profileEditMode ? 'grid' : 'none';
@@ -389,6 +395,166 @@ function getCsrfToken() {
 
 if (profileCloseBtn) {
     profileCloseBtn.addEventListener('click', () => setPopoverOpen(false));
+}
+
+function appendDmMessage(message) {
+    if (!dmOverlayMessages) {
+        return;
+    }
+    if (message.id && dmOverlayMessages.querySelector(`[data-message-id="${message.id}"]`)) {
+        return;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message';
+    if (message.id) {
+        wrapper.dataset.messageId = message.id;
+    }
+    const avatarEl = document.createElement('div');
+    avatarEl.className = 'avatar';
+    avatarEl.textContent = message.sender.charAt(0).toUpperCase();
+    const contentEl = document.createElement('div');
+    contentEl.className = 'message-content';
+    const header = document.createElement('div');
+    header.className = 'message-header';
+    const author = document.createElement('span');
+    author.className = 'message-author';
+    if (message.sender_id === currentUserId) {
+        author.style.color = 'var(--accent-primary)';
+    }
+    author.textContent = message.sender;
+    const time = document.createElement('span');
+    time.className = 'message-time';
+    time.textContent = formatTime(message.created_at);
+    const text = document.createElement('div');
+    text.className = 'message-text';
+    text.textContent = message.content;
+    header.appendChild(author);
+    header.appendChild(time);
+    contentEl.appendChild(header);
+    contentEl.appendChild(text);
+    wrapper.appendChild(avatarEl);
+    wrapper.appendChild(contentEl);
+    dmOverlayMessages.appendChild(wrapper);
+    dmOverlayMessages.scrollTop = dmOverlayMessages.scrollHeight;
+}
+
+function openDmOverlay(userId, username, dmSlug, initialMessages) {
+    if (!dmOverlay) {
+        return;
+    }
+    if (dmSocket && currentDmSlug !== dmSlug) {
+        dmSocket.close();
+        dmSocket = null;
+    }
+    currentDmSlug = dmSlug;
+    if (dmOverlayAvatar) {
+        dmOverlayAvatar.textContent = username.charAt(0).toUpperCase();
+    }
+    if (dmOverlayTitle) {
+        dmOverlayTitle.textContent = username;
+    }
+    if (dmOverlayMessages) {
+        dmOverlayMessages.innerHTML = '';
+        initialMessages.forEach(appendDmMessage);
+    }
+    dmOverlay.classList.add('is-open');
+    dmOverlay.setAttribute('aria-hidden', 'false');
+    if (!dmSocket || dmSocket.readyState === WebSocket.CLOSED) {
+        const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        dmSocket = new WebSocket(`${wsProto}://${window.location.host}/ws/chat/${dmSlug}/`);
+        dmSocket.addEventListener('message', (event) => {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'message') {
+                appendDmMessage(payload.message);
+            }
+        });
+    }
+    if (dmOverlayInput) {
+        dmOverlayInput.focus();
+    }
+}
+
+function closeDmOverlay() {
+    if (dmOverlay) {
+        dmOverlay.classList.remove('is-open');
+        dmOverlay.setAttribute('aria-hidden', 'true');
+    }
+    if (dmSocket) {
+        dmSocket.close();
+        dmSocket = null;
+    }
+    currentDmSlug = null;
+}
+
+function sendDmMessage() {
+    if (!currentDmSlug || !dmOverlayInput) {
+        return;
+    }
+    const content = dmOverlayInput.value.trim();
+    if (!content) {
+        return;
+    }
+    fetch(`/groups/${currentDmSlug}/messages/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: new URLSearchParams({ content }),
+    }).then(async (response) => {
+        if (!response.ok) {
+            throw new Error('dm-send-failed');
+        }
+        dmOverlayInput.value = '';
+        dmOverlayInput.focus();
+    }).catch(() => {
+        if (dmSocket && dmSocket.readyState === WebSocket.OPEN) {
+            dmSocket.send(JSON.stringify({ type: 'message', content }));
+            dmOverlayInput.value = '';
+            dmOverlayInput.focus();
+        }
+    });
+}
+
+const profileDmBtn = document.getElementById('profile-dm-btn');
+if (profileDmBtn) {
+    profileDmBtn.addEventListener('click', () => {
+        if (!activeProfileUserId) {
+            return;
+        }
+        const userId = activeProfileUserId;
+        const username = (activeProfileData && (activeProfileData.display_name || activeProfileData.username)) || 'User';
+        fetch(`/api/dm/${userId}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCsrfToken(),
+            },
+        }).then((r) => r.json()).then((payload) => {
+            if (!payload.ok) {
+                return;
+            }
+            setPopoverOpen(false);
+            openDmOverlay(userId, payload.target_username || username, payload.dm_slug, payload.messages || []);
+        }).catch(() => {});
+    });
+}
+
+if (dmOverlayClose) {
+    dmOverlayClose.addEventListener('click', closeDmOverlay);
+}
+
+if (dmOverlaySend) {
+    dmOverlaySend.addEventListener('click', sendDmMessage);
+}
+
+if (dmOverlayInput) {
+    dmOverlayInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendDmMessage();
+        }
+    });
 }
 
 if (profileEditBtn && profileEditForm) {

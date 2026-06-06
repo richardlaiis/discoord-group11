@@ -242,10 +242,7 @@
                 <button class="profile-edit-btn" id="profile-edit-btn" type="button">Edit profile</button>
             </div>
             <div class="profile-actions" id="profile-actions-other" style="display: none;">
-                <form id="profile-dm-form" method="post" action="">
-                    {% csrf_token %}
-                    <button class="profile-edit-btn" id="profile-dm-btn" type="submit">Message</button>
-                </form>
+                <button class="profile-edit-btn" id="profile-dm-btn" type="button">Message</button>
             </div>
         </div>
 
@@ -257,6 +254,25 @@
             <button class="icon-btn" type="button" title="Poke"><span class="material-symbols-outlined">touch_app</span></button>
         </div>
     </main>
+
+    <div id="dm-overlay" class="dm-overlay" aria-hidden="true">
+        <div class="dm-overlay-header">
+            <div class="avatar dm-overlay-avatar" id="dm-overlay-avatar" style="background: var(--accent-secondary);">?</div>
+            <div class="dm-overlay-title" id="dm-overlay-title">Direct Message</div>
+            <button class="icon-btn" id="dm-overlay-close" type="button" title="Close">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="dm-overlay-messages" id="dm-overlay-messages"></div>
+        <div class="dm-overlay-input-area">
+            <div class="chat-input-wrapper">
+                <input type="text" class="chat-input" id="dm-overlay-input" placeholder="Message..." maxlength="1000" autocomplete="off">
+                <button class="icon-btn" type="button" id="dm-overlay-send" style="padding: 2px;">
+                    <span class="material-symbols-outlined" style="font-size: 1.2rem;">send</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <aside class="right-panel glass-panel">
         <div class="panel-tabs">

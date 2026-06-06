@@ -484,3 +484,45 @@ def start_dm_view(request, user_id):
     dm.members.add(request.user, target_user)
     request.session['active_group_slug'] = dm.slug
     return redirect('room_group', slug=dm.slug)
+
+
+@login_required
+def get_or_create_dm_api(request, user_id):
+    if request.method != 'POST':
+        return JsonResponse({'ok': False}, status=405)
+    if user_id == request.user.id:
+        return JsonResponse({'ok': False, 'error': 'Cannot DM yourself'}, status=400)
+
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    target_user = get_object_or_404(User, pk=user_id)
+
+    existing_dm = ChatGroup.objects.filter(is_dm=True, members=request.user).filter(members=target_user).first()
+    if existing_dm:
+        dm = existing_dm
+    else:
+        dm = ChatGroup.objects.create(name='DM', is_dm=True, owner=request.user)
+        dm.members.add(request.user, target_user)
+
+    raw_messages = (
+        ChatMessage.objects.filter(group=dm)
+        .select_related('sender')
+        .order_by('created_at')[:50]
+    )
+    messages_data = [
+        {
+            'id': m.id,
+            'sender': m.sender.username,
+            'sender_id': m.sender_id,
+            'content': m.content,
+            'created_at': m.created_at.isoformat(),
+        }
+        for m in raw_messages
+    ]
+
+    return JsonResponse({
+        'ok': True,
+        'dm_slug': dm.slug,
+        'target_username': target_user.username,
+        'messages': messages_data,
+    })
