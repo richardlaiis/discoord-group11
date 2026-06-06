@@ -78,9 +78,13 @@
                 <h3>Direct Messages</h3>
                 <div class="group-list">
                     {% for dm in dms %}
-                    <a class="group-link {% if active_group and dm.pk == active_group.pk %}active{% endif %}" href="{% url 'room_group' dm.slug %}">
+                    <a class="group-link {% if active_group and dm.pk == active_group.pk %}active{% endif %}"
+                       href="{% url 'room_group' dm.slug %}"
+                       data-dm-slug="{{ dm.slug }}"
+                       data-partner-id="{{ dm.other_member.id }}"
+                       data-partner-username="{{ dm.other_member.username|escape }}">
                         <div class="user-item">
-                            <div class="avatar" style="background: var(--accent-secondary);">{{ dm.other_member.username|first|upper }}</div>
+                            <div class="avatar" style="background: var(--accent-secondary); position: relative;">{{ dm.other_member.username|first|upper }}</div>
                             <div class="user-info">
                                 <span class="user-name">{{ dm.other_member.username|default:"Unknown" }}</span>
                                 {% if active_group and dm.pk == active_group.pk %}

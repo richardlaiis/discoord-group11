@@ -267,6 +267,14 @@
 .group-link {
   text-decoration: none;
   color: inherit;
+  position: relative;
+}
+
+/* Badge on DM sidebar link is centered vertically within the link row */
+a.group-link > .dm-badge {
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
 }
 
 .group-link .user-item {
@@ -958,6 +966,28 @@
   color: var(--text-secondary);
   font-size: 0.76rem;
   letter-spacing: 0.02em;
+}
+
+/* Unread DM notification badge */
+.dm-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef5350;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+  border: 1.5px solid var(--bg-primary, #0c1118);
+  line-height: 1;
 }
 
 /* Floating DM overlay */
