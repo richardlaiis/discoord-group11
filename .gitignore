@@ -223,3 +223,6 @@ discoord.md
 *.code-workspace
 .vscode/
 discoord_pdf.txt
+
+discoord/media/avatars/*
+discoord/media/drops/*
