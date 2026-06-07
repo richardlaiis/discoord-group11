@@ -425,7 +425,7 @@ a.group-link > .dm-badge {
 }
 
 .space-avatar {
-  position: fixed;
+  position: absolute;
   width: 46px;
   height: 46px;
   border-radius: 999px;

@@ -119,6 +119,7 @@ class UserProfile(models.Model):
 	status_mode = models.CharField(max_length=12, choices=STATUS_CHOICES, default='online')
 	# avatar skin color in hex (e.g. #facc15)
 	skin = models.CharField(max_length=7, blank=True, default='#facc15')
+	avatar_image = models.ImageField(upload_to='avatars/', blank=True, null=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
 	class Meta:
@@ -126,3 +127,18 @@ class UserProfile(models.Model):
 
 	def __str__(self):
 		return f'Profile: {self.user}'
+
+
+class UserDrop(models.Model):
+	user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drops')
+	group = models.ForeignKey(ChatGroup, on_delete=models.CASCADE, related_name='drops')
+	message = models.TextField(max_length=500, blank=True)
+	file = models.FileField(upload_to='drops/', blank=True, null=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		unique_together = [('user', 'group')]
+
+	def __str__(self):
+		return f'Drop by {self.user} in {self.group}'

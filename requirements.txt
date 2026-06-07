@@ -28,3 +28,4 @@ tzdata==2026.2
 ujson==5.12.1
 webencodings==0.5.1
 zope.interface==8.5
+pillow==12.2.0

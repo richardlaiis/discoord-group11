@@ -146,7 +146,7 @@
 
         <div class="user-profile-bar">
             <div class="user-item" style="padding: 0; cursor: default; flex: 1;">
-                <div class="avatar">
+                <div class="avatar" id="sidebar-user-avatar" {% if request.user.profile.avatar_image %}style="background-image: url('{{ request.user.profile.avatar_image.url }}'); background-size: cover; background-position: center; color: transparent;"{% endif %}>
                     {{ request.user.username|first|upper }}
                     <div class="status-dot status-online"></div>
                 </div>
@@ -156,8 +156,6 @@
                 </div>
             </div>
             <div style="display: flex; gap: 4px; align-items: center;">
-                <button class="icon-btn" type="button"><span class="material-symbols-outlined" style="font-size: 1.2rem;">mic</span></button>
-                <button class="icon-btn" type="button"><span class="material-symbols-outlined" style="font-size: 1.2rem;">settings</span></button>
                 <form id="logout-form" method="post" action="{% url 'logout' %}">
                     {% csrf_token %}
                     <button class="icon-btn" type="submit" title="Log out">
@@ -181,6 +179,7 @@
                 data-user-id="{{ member.id }}"
                 data-username="{{ member.display_name|escape }}"
                 data-skin="{{ member.skin|default:'' }}"
+                data-avatar-url="{{ member.avatar_url|default:'' }}"
                 style="top: {{ member.position_y|floatformat:3 }}%; left: {{ member.position_x|floatformat:3 }}%;"
                 title="{{ member.display_name }}"
             >
@@ -218,6 +217,14 @@
             </div>
             <form id="profile-edit-form" class="profile-edit-form" style="display: none;">
                 <label class="profile-input">
+                    <span>Avatar Image</span>
+                    <input type="file" name="avatar_image" accept="image/*">
+                </label>
+                <label class="profile-input" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <input type="checkbox" name="remove_avatar" value="true">
+                    <span style="margin: 0; font-size: 0.85rem; color: var(--danger);">Remove current avatar</span>
+                </label>
+                <label class="profile-input">
                     <span>Display name</span>
                     <input type="text" name="display_name" maxlength="80" placeholder="Add a display name">
                 </label>
@@ -250,7 +257,26 @@
             <div class="profile-actions" id="profile-actions" style="display: none;">
                 <button class="profile-edit-btn" id="profile-skin-btn" type="button">Edit Skin</button>
                 <button class="profile-edit-btn" id="profile-edit-btn" type="button">Edit profile</button>
+                <button class="profile-edit-btn" id="profile-drop-btn" type="button">Set Drop</button>
             </div>
+            
+            <form id="profile-drop-form" class="profile-edit-form" style="display: none;" enctype="multipart/form-data">
+                <label class="profile-input">
+                    <span>Drop Message</span>
+                    <input type="text" name="message" id="drop-message-input" maxlength="500" placeholder="What do you want to show nearby users?">
+                </label>
+                <label class="profile-input">
+                    <span>Drop File</span>
+                    <input type="file" name="file" id="drop-file-input">
+                </label>
+                <label class="profile-input" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <input type="checkbox" name="remove_file" value="true">
+                    <span>Remove current file</span>
+                </label>
+                <div id="current-drop-info" style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 8px;"></div>
+                <button class="profile-save-btn" type="submit">Save Drop</button>
+            </form>
+
             <div class="profile-actions" id="profile-actions-other" style="display: none;">
                 <button class="profile-edit-btn" id="profile-dm-btn" type="button">Message</button>
             </div>
@@ -371,5 +397,6 @@
     const roomStateUrl = {% if active_group %}'{% url 'room_state' active_group.slug %}'{% else %}null{% endif %};
     const currentUserId = {{ request.user.id }};
 </script>
-<script src="{% static 'js/room.js' %}"></script>
+<script src="{% static 'js/room.js' %}?v=4"></script>
+<script src="{% static 'js/proximity.js' %}?v=4"></script>
 {% endblock %}

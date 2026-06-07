@@ -16,6 +16,7 @@ const KEY_TO_VECTOR = {
 const activeKeys = new Set();
 const avatarByUserId = new Map();
 const avatarCanvasByUserId = new Map();
+const loadedAvatarImages = new Map();
 let moveRequestInFlight = false;
 let lastFallbackMoveAt = 0;
 let statePollHandle = null;
@@ -94,21 +95,16 @@ function ensureAvatarElement(userId, username) {
 }
 
 function setAvatarPosFromPercent(avatar, pctX, pctY) {
-    // compute canvas area excluding right panel
-    const rightPanel = document.querySelector('.right-panel');
-    const rightWidth = rightPanel ? Math.floor(rightPanel.getBoundingClientRect().width) : 0;
-    const canvasLeft = 0;
-    const canvasWidth = Math.max(300, Math.floor(window.innerWidth - rightWidth - canvasLeft));
-    const canvasHeight = Math.max(300, Math.floor(window.innerHeight));
-    const px = Math.round(canvasLeft + (canvasWidth * (Number(pctX) / 100)));
-    const py = Math.round((canvasHeight * (Number(pctY) / 100)));
-    avatar.style.left = `${px}px`;
-    avatar.style.top = `${py}px`;
+    avatar.style.left = `${pctX}%`;
+    avatar.style.top = `${pctY}%`;
+    
     // persist percent for future layout changes
     avatar.dataset.percentLeft = String(Number(pctX));
     avatar.dataset.percentTop = String(Number(pctY));
+    
     // update z-index relative to sidebar overlap
-    updateAvatarZIndex(avatar, px);
+    const rect = avatar.getBoundingClientRect();
+    updateAvatarZIndex(avatar, rect.left + rect.width / 2);
 }
 
 function updateAvatarZIndex(avatar, px) {
@@ -216,6 +212,10 @@ function drawAvatarForElement(avatar) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, size, size);
 
+    avatar.style.backgroundImage = 'none';
+    avatar.style.backgroundColor = 'rgba(255, 255, 255, 0.07)';
+    canvas.style.display = 'block';
+
     const rect = avatar.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -282,8 +282,37 @@ function drawAvatarForElement(avatar) {
     // draw body (center)
     ctx.beginPath();
     ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    
+    const avatarUrl = avatar.dataset.avatarUrl;
+    let avatarImg = null;
+    if (avatarUrl) {
+        if (!loadedAvatarImages.has(avatarUrl)) {
+            const img = new Image();
+            img.src = avatarUrl;
+            img.onload = () => {
+                loadedAvatarImages.set(avatarUrl, img);
+                drawAvatarForElement(avatar);
+            };
+            loadedAvatarImages.set(avatarUrl, 'loading');
+        } else {
+            const cached = loadedAvatarImages.get(avatarUrl);
+            if (cached !== 'loading') {
+                avatarImg = cached;
+            }
+        }
+    }
+    
+    if (avatarImg) {
+        ctx.save();
+        ctx.clip();
+        ctx.rotate(-ang); // Undo rotation so the image stays upright
+        ctx.drawImage(avatarImg, -bodyR, -bodyR, bodyR * 2, bodyR * 2);
+        ctx.restore();
+        ctx.stroke();
+    } else {
+        ctx.fill();
+        ctx.stroke();
+    }
 
     ctx.restore();
 }
@@ -370,9 +399,18 @@ function renderProfile(profile) {
         profileUsername.textContent = profile.username ? `@${profile.username}` : '';
     }
     if (profileAvatar) {
-        profileAvatar.textContent = displayName.charAt(0).toUpperCase();
-        // set profile avatar background to skin if provided, otherwise default yellow
-        profileAvatar.style.background = profile.skin || '#facc15';
+        if (profile.avatar_url) {
+            profileAvatar.textContent = '';
+            profileAvatar.style.backgroundImage = `url(${profile.avatar_url})`;
+            profileAvatar.style.backgroundSize = 'cover';
+            profileAvatar.style.backgroundPosition = 'center';
+            profileAvatar.style.backgroundColor = 'transparent';
+        } else {
+            profileAvatar.textContent = displayName.charAt(0).toUpperCase();
+            // set profile avatar background to skin if provided, otherwise default yellow
+            profileAvatar.style.background = profile.skin || '#facc15';
+            profileAvatar.style.backgroundImage = 'none';
+        }
     }
     if (profileStatusText) {
         profileStatusText.textContent = profile.status_text || 'No status set';
@@ -409,11 +447,34 @@ function renderProfile(profile) {
         profileFields.style.display = isSelf && profileEditMode ? 'none' : 'grid';
     }
     updateDisplayNameForUser(profile.user_id, profile.display_name, profile.username);
-    // apply skin to space avatar if provided
+    
+    if (isSelf) {
+        const sidebarAvatar = document.getElementById('sidebar-user-avatar');
+        if (sidebarAvatar) {
+            if (profile.avatar_url) {
+                sidebarAvatar.style.backgroundImage = `url(${profile.avatar_url})`;
+                sidebarAvatar.style.backgroundSize = 'cover';
+                sidebarAvatar.style.backgroundPosition = 'center';
+                sidebarAvatar.style.color = 'transparent';
+            } else {
+                sidebarAvatar.style.backgroundImage = 'none';
+                sidebarAvatar.style.color = '';
+            }
+        }
+    }
+    
+    // apply skin and avatar_url to space avatar if provided
     try {
         const spaceAvatar = document.querySelector(`.space-avatar[data-user-id="${profile.user_id}"]`);
-        if (spaceAvatar && profile.skin) {
-            spaceAvatar.dataset.skin = profile.skin;
+        if (spaceAvatar) {
+            if (profile.skin) {
+                spaceAvatar.dataset.skin = profile.skin;
+            }
+            if (profile.avatar_url) {
+                spaceAvatar.dataset.avatarUrl = profile.avatar_url;
+            } else {
+                delete spaceAvatar.dataset.avatarUrl;
+            }
             // redraw if canvas exists
             const info = avatarCanvasByUserId.get(Number(spaceAvatar.dataset.userId));
             if (info) drawAvatarForElement(spaceAvatar);
@@ -599,6 +660,13 @@ function applyMemberState(memberState) {
         }
         if (typeof memberState.skin !== 'undefined') {
             avatar.dataset.skin = String(memberState.skin || '');
+        }
+        if (typeof memberState.avatar_url !== 'undefined') {
+            if (memberState.avatar_url) {
+                avatar.dataset.avatarUrl = memberState.avatar_url;
+            } else {
+                delete avatar.dataset.avatarUrl;
+            }
         }
     }
     drawAvatarForElement(avatar);
@@ -897,6 +965,11 @@ function openDmOverlay(userId, username, dmSlug, initialMessages) {
     }
     currentDmSlug = dmSlug;
     clearUnreadBadge(userId);
+    
+    // Clear any active movement keys so the avatar stops moving when DM opens
+    if (typeof activeKeys !== 'undefined') {
+        activeKeys.clear();
+    }
 
     if (dmOverlayAvatar) {
         dmOverlayAvatar.textContent = username.charAt(0).toUpperCase();
@@ -1027,10 +1100,9 @@ if (profileEditBtn && profileEditForm) {
         fetch(url, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
                 'X-CSRFToken': getCsrfToken(),
             },
-            body: new URLSearchParams(formData),
+            body: formData,
         }).then(async (response) => {
             if (!response.ok) {
                 throw new Error('profile-save-failed');
@@ -1042,6 +1114,7 @@ if (profileEditBtn && profileEditForm) {
             }
             activeProfileData = payload.profile;
             profileEditMode = false;
+            profileEditForm.reset();
             renderProfile(activeProfileData);
             if (activeProfileAnchor) {
                 setTimeout(() => {
@@ -1304,6 +1377,10 @@ function normalizeKey(eventKey) {
 }
 
 document.addEventListener('keydown', (event) => {
+    if (dmOverlay && dmOverlay.classList.contains('is-open')) {
+        return;
+    }
+    
     if (isTypingTarget(event.target)) {
         return;
     }
@@ -1318,16 +1395,14 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('keyup', (event) => {
-    if (isTypingTarget(event.target)) {
-        return;
-    }
-
     const key = normalizeKey(event.key);
     if (!(key in KEY_TO_VECTOR)) {
         return;
     }
 
-    event.preventDefault();
+    if (!isTypingTarget(event.target)) {
+        event.preventDefault();
+    }
     activeKeys.delete(key);
 });
 

@@ -8,7 +8,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from .forms import ChatGroupCreateForm, ChatGroupJoinForm, RegistrationForm, BlackboardNoteForm
-from .models import ChatGroup, ChatGroupMembership, ChatMessage, BlackboardNote, UserProfile
+from .models import ChatGroup, ChatGroupMembership, ChatMessage, BlackboardNote, UserProfile, UserDrop
 from .presence import (
     get_online_member_ids,
     get_online_member_states,
@@ -108,6 +108,7 @@ def room_view(request, slug=None):
                     memberships.get(member.id).position_y if memberships.get(member.id) else 50.0,
                 ),
                 'skin': (profiles_by_user_id.get(member.id).skin if profiles_by_user_id.get(member.id) else '') or '',
+                'avatar_url': profiles_by_user_id.get(member.id).avatar_image.url if (profiles_by_user_id.get(member.id) and profiles_by_user_id.get(member.id).avatar_image) else None,
             }
             for member in members
         ]
@@ -424,6 +425,7 @@ def group_member_profile_view(request, slug, user_id):
                     'status_mode': profile.status_mode,
                     'is_self': target_user.id == request.user.id,
                     'skin': profile.skin,
+                    'avatar_url': profile.avatar_image.url if profile.avatar_image else None,
                 },
             }
         )
@@ -451,6 +453,13 @@ def group_member_profile_view(request, slug, user_id):
     skin_val = (request.POST.get('skin') or '').strip()
     if skin_val and skin_val.startswith('#') and len(skin_val) in (4, 7):
         profile.skin = skin_val
+
+    if request.POST.get('remove_avatar') == 'true':
+        profile.avatar_image.delete(save=False)
+        profile.avatar_image = None
+    elif 'avatar_image' in request.FILES:
+        profile.avatar_image = request.FILES['avatar_image']
+
     profile.save()
 
     # broadcast presence/state to group so other clients receive updated skin
@@ -480,6 +489,7 @@ def group_member_profile_view(request, slug, user_id):
                 'status_mode': profile.status_mode,
                 'is_self': True,
                 'skin': profile.skin,
+                'avatar_url': profile.avatar_image.url if profile.avatar_image else None,
             },
         }
     )
@@ -547,3 +557,46 @@ def get_or_create_dm_api(request, user_id):
         'target_username': target_user.username,
         'messages': messages_data,
     })
+
+@login_required
+def group_drops_api(request, slug):
+    if request.method == 'GET':
+        group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+        drops = UserDrop.objects.filter(group=group)
+        data = {}
+        for drop in drops:
+            data[drop.user_id] = {
+                'message': drop.message,
+                'file_url': drop.file.url if drop.file else None,
+                'file_name': drop.file.name.split('/')[-1] if drop.file else None,
+            }
+        return JsonResponse({'ok': True, 'drops': data})
+    elif request.method == 'POST':
+        group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+        drop, created = UserDrop.objects.get_or_create(user=request.user, group=group)
+        if 'message' in request.POST:
+            drop.message = request.POST['message']
+        if 'file' in request.FILES:
+            drop.file = request.FILES['file']
+        elif request.POST.get('remove_file') == 'true':
+            drop.file = None
+        drop.save()
+        return JsonResponse({'ok': True})
+    return JsonResponse({'ok': False}, status=405)
+
+@login_required
+def user_drop_api(request, slug, user_id):
+    if request.method == 'GET':
+        group = get_object_or_404(ChatGroup, slug=slug, members=request.user)
+        drop = UserDrop.objects.filter(user_id=user_id, group=group).first()
+        if drop:
+            return JsonResponse({
+                'ok': True,
+                'drop': {
+                    'message': drop.message,
+                    'file_url': drop.file.url if drop.file else None,
+                    'file_name': drop.file.name.split('/')[-1] if drop.file else None,
+                }
+            })
+        return JsonResponse({'ok': True, 'drop': None})
+    return JsonResponse({'ok': False}, status=405)

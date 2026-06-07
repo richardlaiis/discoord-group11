@@ -1,4 +1,5 @@
 import math
+import threading
 
 from django.core.cache import cache
 from django.utils import timezone
@@ -6,13 +7,13 @@ from django.utils import timezone
 from .models import ChatGroupMembership
 from .models import UserProfile
 
-
 PRESENCE_TIMEOUT = 120
 POSITION_MIN = 6.0
 POSITION_MAX = 94.0
 MOVE_STEP_LIMIT = 3.0
 POSITION_PERSIST_INTERVAL = 0.8
 
+_presence_lock = threading.Lock()
 
 def _presence_key(group_slug):
     return f'chat:presence:{group_slug}'
@@ -20,6 +21,16 @@ def _presence_key(group_slug):
 
 def _clamp(value, minimum, maximum):
     return max(minimum, min(maximum, value))
+
+def _is_overlapping(x, y, presence, ignore_user_id=None):
+    for uid, record in presence.items():
+        if uid == ignore_user_id:
+            continue
+        rx, ry = record.get('x'), record.get('y')
+        if rx is not None and ry is not None:
+            if math.hypot(x - rx, y - ry) < 3.0:
+                return True
+    return False
 
 
 def _to_float(value, fallback):
@@ -180,16 +191,16 @@ def get_online_member_states(group_slug):
     if cleaned != presence:
         _store_presence(group_slug, cleaned)
 
-    # bulk-load profiles for skins to avoid per-user queries
     user_ids = [int(uid) for uid in cleaned.keys()]
     profiles = {
         p.user_id: p
-        for p in UserProfile.objects.filter(user_id__in=user_ids).only('user_id', 'skin')
+        for p in UserProfile.objects.filter(user_id__in=user_ids).only('user_id', 'skin', 'avatar_image')
     } if user_ids else {}
 
     states = {}
     for user_id, record in cleaned.items():
         uid = int(user_id)
+        p = profiles.get(uid)
         states[uid] = {
             'user_id': uid,
             'username': record.get('username', ''),
@@ -197,48 +208,50 @@ def get_online_member_states(group_slug):
             'y': _clamp(_to_float(record.get('y'), 50.0), POSITION_MIN, POSITION_MAX),
             'vx': _to_float(record.get('vx'), 0.0),
             'vy': _to_float(record.get('vy'), 0.0),
-            'skin': (profiles.get(uid).skin if profiles.get(uid) else '') or '',
+            'skin': (p.skin if p else '') or '',
+            'avatar_url': p.avatar_image.url if (p and p.avatar_image) else None,
         }
     return states
 
 
 def update_member_motion(group_slug, user, delta_x, delta_y):
-    presence = _cleanup_presence(_load_presence(group_slug))
-    user_id = str(user.id)
-    now = timezone.now().timestamp()
+    with _presence_lock:
+        presence = _cleanup_presence(_load_presence(group_slug))
+        user_id = str(user.id)
+        now = timezone.now().timestamp()
 
-    record = presence.get(user_id, {'username': user.username, 'count': 1, 'last_seen': now})
-    if 'x' not in record or 'y' not in record:
-        saved_position = _load_member_position(group_slug, user.id)
-        if saved_position:
-            x, y = saved_position
-        else:
-            x, y = _spawn_position_for_user(presence, user.id)
-        record['x'] = x
-        record['y'] = y
+        record = presence.get(user_id, {'username': user.username, 'count': 1, 'last_seen': now})
+        if 'x' not in record or 'y' not in record:
+            saved_position = _load_member_position(group_slug, user.id)
+            if saved_position:
+                x, y = saved_position
+            else:
+                x, y = _spawn_position_for_user(presence, user.id)
+            record['x'] = x
+            record['y'] = y
 
-    dx = _clamp(_to_float(delta_x, 0.0), -MOVE_STEP_LIMIT, MOVE_STEP_LIMIT)
-    dy = _clamp(_to_float(delta_y, 0.0), -MOVE_STEP_LIMIT, MOVE_STEP_LIMIT)
+        dx = _clamp(_to_float(delta_x, 0.0), -MOVE_STEP_LIMIT, MOVE_STEP_LIMIT)
+        dy = _clamp(_to_float(delta_y, 0.0), -MOVE_STEP_LIMIT, MOVE_STEP_LIMIT)
 
-    next_x = _clamp(_to_float(record.get('x'), 50.0) + dx, POSITION_MIN, POSITION_MAX)
-    next_y = _clamp(_to_float(record.get('y'), 50.0) + dy, POSITION_MIN, POSITION_MAX)
+        next_x = _clamp(_to_float(record.get('x'), 50.0) + dx, POSITION_MIN, POSITION_MAX)
+        next_y = _clamp(_to_float(record.get('y'), 50.0) + dy, POSITION_MIN, POSITION_MAX)
 
-    record['x'] = next_x
-    record['y'] = next_y
-    record['vx'] = dx
-    record['vy'] = dy
-    record['username'] = user.username
-    record['count'] = max(1, int(record.get('count', 1)))
-    record['last_seen'] = now
-    last_saved_at = _to_float(record.get('position_saved_at'), 0.0)
-    should_persist = (now - last_saved_at) >= POSITION_PERSIST_INTERVAL
-    if should_persist:
-        record['position_saved_at'] = now
-    presence[user_id] = record
+        record['x'] = next_x
+        record['y'] = next_y
+        record['vx'] = dx
+        record['vy'] = dy
+        record['username'] = user.username
+        record['count'] = max(1, int(record.get('count', 1)))
+        record['last_seen'] = now
+        last_saved_at = _to_float(record.get('position_saved_at'), 0.0)
+        should_persist = (now - last_saved_at) >= POSITION_PERSIST_INTERVAL
+        if should_persist:
+            record['position_saved_at'] = now
+        presence[user_id] = record
 
-    _store_presence(group_slug, presence)
-    if should_persist:
-        _save_member_position(group_slug, user.id, next_x, next_y)
+        _store_presence(group_slug, presence)
+        if should_persist:
+            _save_member_position(group_slug, user.id, next_x, next_y)
 
     return {
         'user_id': user.id,
