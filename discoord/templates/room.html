@@ -128,7 +128,7 @@
                 <div class="group-list">
                     {% for member in member_cards %}
                     <div class="user-item member-row" data-user-id="{{ member.id }}" data-username="{{ member.display_name|escape }}" data-online="{% if member.is_online %}true{% else %}false{% endif %}">
-                        <div class="avatar">
+                        <div class="avatar" {% if member.avatar_url %}style="background-image: url('{{ member.avatar_url }}'); background-size: cover; background-position: center; color: transparent;"{% endif %}>
                             {{ member.display_name|first|upper }}
                             <div class="status-dot {% if member.is_online %}status-online{% else %}status-idle{% endif %}"></div>
                         </div>

@@ -120,6 +120,7 @@ def room_view(request, slug=None):
                 if profiles_by_user_id.get(member.id)
                 else member.username,
                 'is_online': member.id in online_member_ids,
+                'avatar_url': profiles_by_user_id.get(member.id).avatar_image.url if (profiles_by_user_id.get(member.id) and profiles_by_user_id.get(member.id).avatar_image) else None,
             }
             for member in members
         ]
@@ -458,6 +459,7 @@ def group_member_profile_view(request, slug, user_id):
         profile.avatar_image.delete(save=False)
         profile.avatar_image = None
     elif 'avatar_image' in request.FILES:
+        profile.avatar_image.delete(save=False)
         profile.avatar_image = request.FILES['avatar_image']
 
     profile.save()

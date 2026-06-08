@@ -115,7 +115,12 @@ function updateAvatarZIndex(avatar, px) {
     if (px < Math.ceil(sbRect.right)) {
         avatar.style.zIndex = '4';
     } else {
-        avatar.style.zIndex = '20';
+        const userId = Number(avatar.dataset.userId || -1);
+        if (userId === Number(currentUserId)) {
+            avatar.style.zIndex = '21';
+        } else {
+            avatar.style.zIndex = '20';
+        }
     }
 }
 
