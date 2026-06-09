@@ -1002,11 +1002,18 @@ function sendVoiceSignal(targetUserId, payload) {
     }));
 }
 
+const VOICE_ICE_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+};
+
 async function createVoicePeerConnection(remoteUserId) {
     if (voicePeerConnections.has(remoteUserId)) {
         return voicePeerConnections.get(remoteUserId);
     }
-    const pc = new RTCPeerConnection();
+    const pc = new RTCPeerConnection(VOICE_ICE_SERVERS);
     const localStream = await getLocalAudioStream();
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
@@ -1059,6 +1066,9 @@ async function maybeCreateOffer(remoteUserId) {
             sdp: offer.sdp,
             sdp_type: offer.type,
         });
+    } else {
+        // Ask the lower-ID peer to send us a fresh offer
+        sendVoiceSignal(remoteUserId, { signal_type: 'request_offer' });
     }
 }
 
@@ -1098,6 +1108,20 @@ async function handleVoiceSignalEvent(fromUserId, signal) {
         };
         await pc.setRemoteDescription(description);
         await flushIceCandidates(remoteUserId);
+        return;
+    }
+
+    if (signalType === 'request_offer') {
+        // Remote peer started voice call and needs us (lower ID) to send a fresh offer
+        removeVoiceConnection(remoteUserId);
+        const freshPc = await createVoicePeerConnection(remoteUserId);
+        const offer = await freshPc.createOffer();
+        await freshPc.setLocalDescription(offer);
+        sendVoiceSignal(remoteUserId, {
+            signal_type: 'offer',
+            sdp: offer.sdp,
+            sdp_type: offer.type,
+        });
         return;
     }
 
