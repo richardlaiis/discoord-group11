@@ -1,6 +1,8 @@
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import views as auth_views
+from django.contrib.auth.views import LogoutView as DjangoLogoutView
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -15,6 +17,64 @@ from .presence import (
     touch_member_online,
     update_member_motion,
 )
+
+
+class CustomLogoutView(DjangoLogoutView):
+    """自訂登出視圖，登出時將狀態改為 offline（除非已設為 invisible 或 offline）"""
+    
+    def _set_offline_before_logout(self, request):
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.profile
+                if profile.status_mode not in ('invisible', 'offline'):
+                    profile.last_status_mode = profile.status_mode
+                    profile.status_mode = 'offline'
+                    profile.save()
+            except UserProfile.DoesNotExist:
+                pass
+
+    def get(self, request, *args, **kwargs):
+        self._set_offline_before_logout(request)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        self._set_offline_before_logout(request)
+        return super().post(request, *args, **kwargs)
+
+
+class CustomLoginView(auth_views.LoginView):
+    """自訂登入視圖，登入時恢復用戶之前的狀態"""
+    
+    def form_valid(self, form):
+        user = form.get_user()
+        login(self.request, user)
+        
+        # 登入後恢復狀態
+        try:
+            profile = user.profile
+            # 如果目前狀態是 offline 且有保存的上次狀態，就恢復
+            if profile.status_mode == 'offline' and profile.last_status_mode and profile.last_status_mode not in ('offline', 'invisible'):
+                profile.status_mode = profile.last_status_mode
+                profile.last_status_mode = None
+                profile.save()
+        except UserProfile.DoesNotExist:
+            pass
+        
+        return redirect(self.get_success_url())
+
+
+def _restore_user_status(request):
+    """登入時恢復用戶之前的狀態"""
+    if request.user.is_authenticated:
+        try:
+            profile = request.user.profile
+            # 如果目前狀態是 offline 且有保存的上次狀態，就恢復
+            if profile.status_mode == 'offline' and profile.last_status_mode and profile.last_status_mode not in ('offline', 'invisible'):
+                profile.status_mode = profile.last_status_mode
+                profile.last_status_mode = None
+                profile.save()
+        except UserProfile.DoesNotExist:
+            pass
 
 
 def _resolve_active_group(request, groups, slug=None):
@@ -112,18 +172,19 @@ def room_view(request, slug=None):
             }
             for member in members
         ]
-        member_cards = [
-            {
+        member_cards = []
+        for member in members:
+            profile_obj = profiles_by_user_id.get(member.id)
+            raw_mode = profile_obj.status_mode if profile_obj else 'offline'
+            display_mode = 'offline' if (raw_mode == 'invisible' and member.id != request.user.id) else raw_mode
+            member_cards.append({
                 'id': member.id,
                 'username': member.username,
-                'display_name': (profiles_by_user_id.get(member.id).display_name or member.username)
-                if profiles_by_user_id.get(member.id)
-                else member.username,
+                'display_name': (profile_obj.display_name or member.username) if profile_obj else member.username,
                 'is_online': member.id in online_member_ids,
-                'avatar_url': profiles_by_user_id.get(member.id).avatar_image.url if (profiles_by_user_id.get(member.id) and profiles_by_user_id.get(member.id).avatar_image) else None,
-            }
-            for member in members
-        ]
+                'status_mode': display_mode,
+                'avatar_url': profile_obj.avatar_image.url if (profile_obj and profile_obj.avatar_image) else None,
+            })
     else:
         blackboard_notes = BlackboardNote.objects.none()
         member_cards = []
@@ -429,6 +490,9 @@ def group_member_profile_view(request, slug, user_id):
     profile = _get_or_create_profile(target_user)
 
     if request.method == 'GET':
+        is_self = target_user.id == request.user.id
+        raw_mode = profile.status_mode
+        display_mode = 'offline' if (raw_mode == 'invisible' and not is_self) else raw_mode
         return JsonResponse(
             {
                 'ok': True,
@@ -439,8 +503,8 @@ def group_member_profile_view(request, slug, user_id):
                     'pronouns': profile.pronouns,
                     'bio': profile.bio,
                     'status_text': profile.status_text,
-                    'status_mode': profile.status_mode,
-                    'is_self': target_user.id == request.user.id,
+                    'status_mode': display_mode,
+                    'is_self': is_self,
                     'skin': profile.skin,
                     'avatar_url': profile.avatar_image.url if profile.avatar_image else None,
                 },

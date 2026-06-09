@@ -319,26 +319,6 @@ a.group-link > .dm-badge {
   background: var(--text-muted);
 }
 
-.presence-pill.online {
-  color: var(--success);
-}
-
-.presence-pill.online::before {
-  background: var(--success);
-}
-
-.member-row[data-online='true'] .presence-pill {
-  color: var(--success);
-}
-
-.member-row[data-online='true'] .presence-pill::before {
-  background: var(--success);
-}
-
-.member-row[data-online='false'] .presence-pill::before {
-  background: var(--text-muted);
-}
-
 .user-item {
   display: flex;
   gap: 14px;
@@ -373,6 +353,28 @@ a.group-link > .dm-badge {
   position: absolute;
   right: -1px;
   bottom: -1px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  border: 2px solid rgba(12, 16, 23, 0.95);
+  background: #a1a5b1;
+}
+
+.status-dot-online {
+  background: var(--success);
+}
+
+.status-dot-idle {
+  background: var(--warning);
+}
+
+.status-dot-dnd {
+  background: var(--danger);
+}
+
+.status-dot-invisible,
+.status-dot-offline {
+  background: #a1a5b1;
 }
 
 .user-info {
@@ -640,6 +642,52 @@ a.group-link > .dm-badge {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.status-mode-offline {
+  color: var(--text-muted);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Status mode colors in presence pill */
+.presence-pill.status-mode-online {
+  color: var(--success);
+}
+
+.presence-pill.status-mode-online::before {
+  background: var(--success);
+}
+
+.presence-pill.status-mode-idle {
+  color: var(--warning);
+}
+
+.presence-pill.status-mode-idle::before {
+  background: var(--warning);
+}
+
+.presence-pill.status-mode-dnd {
+  color: var(--danger);
+}
+
+.presence-pill.status-mode-dnd::before {
+  background: var(--danger);
+}
+
+.presence-pill.status-mode-invisible {
+  color: var(--text-muted);
+}
+
+.presence-pill.status-mode-invisible::before {
+  background: var(--text-muted);
+}
+
+.presence-pill.status-mode-offline {
+  color: var(--text-muted);
+}
+
+.presence-pill.status-mode-offline::before {
+  background: var(--text-muted);
+}
+
 .profile-fields {
   display: grid;
   gap: 8px;
@@ -690,6 +738,24 @@ a.group-link > .dm-badge {
   color: var(--text-primary);
   padding: 8px 10px;
   font-size: 0.82rem;
+}
+
+.profile-input select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1L6 6L11 1" stroke="%23a1a5b1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: auto;
+  padding-right: 30px;
+}
+
+.profile-input select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 8px;
 }
 
 .profile-input textarea {

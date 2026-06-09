@@ -384,13 +384,6 @@ function updateDisplayNameForUser(userId, displayName, username) {
             spaceAvatar.textContent = safeName.charAt(0).toUpperCase();
         }
     }
-
-    if (Number(userId) === currentUserId) {
-        const profileBar = document.querySelector('.user-profile-bar .user-name');
-        if (profileBar) {
-            profileBar.textContent = safeName;
-        }
-    }
 }
 
 function renderProfile(profile) {
@@ -454,6 +447,20 @@ function renderProfile(profile) {
     }
     updateDisplayNameForUser(profile.user_id, profile.display_name, profile.username);
     
+    // Update status mode in member row
+    const memberRow = document.querySelector(`.member-row[data-user-id="${profile.user_id}"]`);
+    if (memberRow) {
+        memberRow.dataset.statusMode = profile.status_mode || 'online';
+        const presencePill = memberRow.querySelector('.presence-pill');
+        if (presencePill) {
+            presencePill.classList.remove('status-mode-online', 'status-mode-idle', 'status-mode-dnd', 'status-mode-invisible', 'status-mode-offline');
+            const statusMode = profile.status_mode || 'online';
+            presencePill.classList.add(`status-mode-${statusMode}`);
+            const titleText = statusMode.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            presencePill.textContent = titleText;
+        }
+    }
+    
     if (isSelf) {
         const sidebarAvatar = document.getElementById('sidebar-user-avatar');
         if (sidebarAvatar) {
@@ -466,6 +473,30 @@ function renderProfile(profile) {
                 sidebarAvatar.style.backgroundImage = 'none';
                 sidebarAvatar.style.color = '';
             }
+            
+            // Update avatar initial letter
+            const avatarInitial = document.getElementById('sidebar-user-avatar-initial');
+            if (avatarInitial) {
+                const displayName = profile.display_name || profile.username || '';
+                avatarInitial.textContent = displayName.charAt(0).toUpperCase();
+            }
+
+
+        }
+
+        // Update display name in profile bar
+        const sidebarUserName = document.getElementById('sidebar-user-name');
+        if (sidebarUserName) {
+            sidebarUserName.textContent = profile.display_name || profile.username || '';
+        }
+
+        // Update status mode in profile bar
+        const sidebarUserStatus = document.getElementById('sidebar-user-status');
+        if (sidebarUserStatus) {
+            const mode = profile.status_mode || 'online';
+            sidebarUserStatus.classList.remove('status-mode-online', 'status-mode-idle', 'status-mode-dnd', 'status-mode-invisible', 'status-mode-offline');
+            sidebarUserStatus.classList.add(`status-mode-${mode}`);
+            sidebarUserStatus.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
         }
     }
     
@@ -786,10 +817,6 @@ function addMemberToSidebar(userId, username) {
     avatarEl.className = 'avatar';
     avatarEl.textContent = username.charAt(0).toUpperCase();
 
-    const dot = document.createElement('div');
-    dot.className = 'status-dot status-online';
-    avatarEl.appendChild(dot);
-
     const userInfo = document.createElement('div');
     userInfo.className = 'user-info';
 
@@ -798,7 +825,7 @@ function addMemberToSidebar(userId, username) {
     nameSpan.textContent = username;
 
     const pill = document.createElement('span');
-    pill.className = 'presence-pill online';
+    pill.className = 'presence-pill status-mode-online';
     pill.textContent = 'Online';
 
     userInfo.appendChild(nameSpan);
@@ -836,11 +863,7 @@ function updatePresence(onlineMemberIds, memberStates) {
         const userId = Number(row.dataset.userId);
         const isOnline = onlineIds.has(userId);
         row.dataset.online = String(isOnline);
-        const pill = row.querySelector('.presence-pill');
-        if (pill) {
-            pill.textContent = isOnline ? 'Online' : 'Offline';
-            pill.classList.toggle('online', isOnline);
-        }
+        // pill reflects profile status_mode, not raw presence
     });
 
     const roomOnlineCount = document.getElementById('room-online-count');
@@ -1350,10 +1373,6 @@ function openDmOverlay(userId, username, dmSlug, initialMessages) {
     dmOverlay.setAttribute('aria-hidden', 'false');
 
     connectDmBackground(dmSlug, userId, username);
-
-    if (dmOverlayInput) {
-        dmOverlayInput.focus();
-    }
 }
 
 function closeDmOverlay() {

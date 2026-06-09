@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/room.css' %}?v=6">
+<link rel="stylesheet" href="{% static 'css/room.css' %}?v=7">
 {% endblock %}
 
 {% block content %}
@@ -136,14 +136,13 @@
                 <h3>Members</h3>
                 <div class="group-list">
                     {% for member in member_cards %}
-                    <div class="user-item member-row" data-user-id="{{ member.id }}" data-username="{{ member.display_name|escape }}" data-online="{% if member.is_online %}true{% else %}false{% endif %}">
+                    <div class="user-item member-row" data-user-id="{{ member.id }}" data-username="{{ member.display_name|escape }}" data-online="{% if member.is_online %}true{% else %}false{% endif %}" data-status-mode="{{ member.status_mode }}">
                         <div class="avatar" {% if member.avatar_url %}style="background-image: url('{{ member.avatar_url }}'); background-size: cover; background-position: center; color: transparent;"{% endif %}>
                             {{ member.display_name|first|upper }}
-                            <div class="status-dot {% if member.is_online %}status-online{% else %}status-idle{% endif %}"></div>
                         </div>
                         <div class="user-info">
                             <span class="user-name">{{ member.display_name }}</span>
-                            <span class="presence-pill {% if member.is_online %}online{% endif %}">{% if member.is_online %}Online{% else %}Offline{% endif %}</span>
+                            <span class="presence-pill status-mode-{{ member.status_mode }}">{{ member.status_mode|title }}</span>
                         </div>
                     </div>
                     {% empty %}
@@ -156,12 +155,11 @@
         <div class="user-profile-bar">
             <div class="user-item" style="padding: 0; cursor: default; flex: 1;">
                 <div class="avatar" id="sidebar-user-avatar" {% if request.user.profile.avatar_image %}style="background-image: url('{{ request.user.profile.avatar_image.url }}'); background-size: cover; background-position: center; color: transparent;"{% endif %}>
-                    {{ request.user.username|first|upper }}
-                    <div class="status-dot status-online"></div>
+                    <span id="sidebar-user-avatar-initial">{{ request.user.profile.display_name|default:request.user.username|first|upper }}</span>
                 </div>
                 <div class="user-info">
-                    <span class="user-name">{{ request.user.username }}</span>
-                    <span class="user-activity" style="color: var(--success)">Online</span>
+                    <span class="user-name" id="sidebar-user-name">{{ request.user.profile.display_name|default:request.user.username }}</span>
+                    <span class="presence-pill status-mode-{{ request.user.profile.status_mode }}" id="sidebar-user-status">{{ request.user.profile.status_mode|title }}</span>
                 </div>
             </div>
             <div style="display: flex; gap: 4px; align-items: center;">
@@ -252,6 +250,7 @@
                         <option value="idle">Idle</option>
                         <option value="dnd">Do not disturb</option>
                         <option value="invisible">Invisible</option>
+                        <option value="offline">Offline</option>
                     </select>
                 </label>
                 <label class="profile-input">
@@ -408,6 +407,6 @@
     const roomStateUrl = {% if active_group %}'{% url 'room_state' active_group.slug %}'{% else %}null{% endif %};
     const currentUserId = {{ request.user.id }};
 </script>
-<script src="{% static 'js/room.js' %}?v=5"></script>
+<script src="{% static 'js/room.js' %}?v=6"></script>
 <script src="{% static 'js/proximity.js' %}?v=5"></script>
 {% endblock %}

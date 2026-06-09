@@ -105,6 +105,7 @@ class UserProfile(models.Model):
 		('idle', 'Idle'),
 		('dnd', 'Do not disturb'),
 		('invisible', 'Invisible'),
+		('offline', 'Offline'),
 	]
 
 	user = models.OneToOneField(
@@ -117,6 +118,7 @@ class UserProfile(models.Model):
 	bio = models.TextField(max_length=240, blank=True)
 	status_text = models.CharField(max_length=120, blank=True)
 	status_mode = models.CharField(max_length=12, choices=STATUS_CHOICES, default='online')
+	last_status_mode = models.CharField(max_length=12, choices=STATUS_CHOICES, default='online', blank=True, null=True)
 	# avatar skin color in hex (e.g. #facc15)
 	skin = models.CharField(max_length=7, blank=True, default='#facc15')
 	avatar_image = models.ImageField(upload_to='avatars/', blank=True, null=True)
