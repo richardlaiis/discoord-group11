@@ -64,6 +64,26 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             return
 
         if message_type != 'message':
+            if message_type == 'voice_signal':
+                target_id = content.get('to_user_id')
+                if target_id is None:
+                    return
+                try:
+                    target_id = int(target_id)
+                except (TypeError, ValueError):
+                    return
+
+                await self.channel_layer.group_send(
+                    f'user_{target_id}',
+                    {
+                        'type': 'voice.signal',
+                        'from_user_id': self.user.id,
+                        'to_user_id': target_id,
+                        'signal': content.get('signal', {}),
+                    },
+                )
+                return
+
             if message_type != 'blackboard_note':
                 return
 
@@ -133,6 +153,14 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             'dm_slug': event['dm_slug'],
             'partner_id': event['partner_id'],
             'partner_username': event['partner_username'],
+        })
+
+    async def voice_signal(self, event):
+        await self.send_json({
+            'type': 'voice_signal',
+            'from_user_id': event['from_user_id'],
+            'to_user_id': event['to_user_id'],
+            'signal': event['signal'],
         })
 
     async def set_online(self):

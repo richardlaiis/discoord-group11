@@ -909,6 +909,24 @@ a.group-link > .dm-badge {
   background: #111822;
 }
 
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.voice-controls .voice-status-text {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.voice-controls .icon-btn {
+  min-width: 36px;
+  min-height: 36px;
+}
+
 .sticky-note {
   padding: 14px;
   border-radius: 16px;

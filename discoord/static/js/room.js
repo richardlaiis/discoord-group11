@@ -855,6 +855,322 @@ function updatePresence(onlineMemberIds, memberStates) {
 }
 
 const socket = activeGroupSlug ? new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/chat/${activeGroupSlug}/`) : null;
+const voiceAudioContainer = document.getElementById('voice-audio-container');
+const voiceCallBtn = document.getElementById('voice-call-btn');
+const muteBtn = document.getElementById('mute-btn');
+const voiceStatusText = document.getElementById('voice-status');
+let localVoiceStream = null;
+let voiceCallActive = false;
+let microphoneEnabled = true;
+const voicePeerConnections = new Map();
+const pendingIceCandidates = new Map();
+const remoteAudioElements = new Map();
+
+function isVoiceControlAvailable() {
+    return Boolean(voiceCallBtn && muteBtn && voiceStatusText && socket);
+}
+
+function updateVoiceUi() {
+    if (!isVoiceControlAvailable()) {
+        return;
+    }
+
+    if (voiceCallActive) {
+        voiceCallBtn.title = 'Stop voice call';
+        voiceCallBtn.querySelector('span').textContent = 'mic';
+        muteBtn.style.display = '';
+        muteBtn.title = microphoneEnabled ? 'Mute microphone' : 'Unmute microphone';
+        muteBtn.querySelector('span').textContent = microphoneEnabled ? 'mic' : 'mic_off';
+        voiceStatusText.textContent = `Voice: ${microphoneEnabled ? 'On' : 'Muted'}`;
+    } else {
+        voiceCallBtn.title = 'Start voice call';
+        voiceCallBtn.querySelector('span').textContent = 'mic';
+        muteBtn.style.display = 'none';
+        voiceStatusText.textContent = 'Voice: Off';
+    }
+}
+
+function cleanupVoiceElement(remoteUserId) {
+    const audioEl = remoteAudioElements.get(remoteUserId);
+    if (audioEl && audioEl.parentNode) {
+        audioEl.parentNode.removeChild(audioEl);
+    }
+    remoteAudioElements.delete(remoteUserId);
+}
+
+function removeVoiceConnection(remoteUserId) {
+    const pc = voicePeerConnections.get(remoteUserId);
+    if (pc) {
+        pc.close();
+        voicePeerConnections.delete(remoteUserId);
+    }
+    pendingIceCandidates.delete(remoteUserId);
+    cleanupVoiceElement(remoteUserId);
+}
+
+function clearVoiceConnections() {
+    voicePeerConnections.forEach((_, remoteUserId) => removeVoiceConnection(remoteUserId));
+}
+
+async function getLocalAudioStream() {
+    if (localVoiceStream) {
+        return localVoiceStream;
+    }
+    try {
+        localVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localVoiceStream.getAudioTracks().forEach((track) => {
+            track.enabled = microphoneEnabled;
+        });
+        return localVoiceStream;
+    } catch (error) {
+        console.error('Failed to access microphone:', error);
+        throw error;
+    }
+}
+
+function createRemoteAudioElement(remoteUserId) {
+    if (!voiceAudioContainer) {
+        return null;
+    }
+    cleanupVoiceElement(remoteUserId);
+    const audio = document.createElement('audio');
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.dataset.userId = String(remoteUserId);
+    voiceAudioContainer.appendChild(audio);
+    remoteAudioElements.set(remoteUserId, audio);
+    return audio;
+}
+
+function queueIceCandidate(remoteUserId, candidate) {
+    if (!pendingIceCandidates.has(remoteUserId)) {
+        pendingIceCandidates.set(remoteUserId, []);
+    }
+    pendingIceCandidates.get(remoteUserId).push(candidate);
+}
+
+async function flushIceCandidates(remoteUserId) {
+    const pc = voicePeerConnections.get(remoteUserId);
+    if (!pc) {
+        return;
+    }
+    const candidates = pendingIceCandidates.get(remoteUserId) || [];
+    if (!candidates.length) {
+        return;
+    }
+    for (const candidate of candidates) {
+        try {
+            await pc.addIceCandidate(candidate);
+        } catch (error) {
+            console.warn('Failed to add queued ICE candidate:', error);
+        }
+    }
+    pendingIceCandidates.delete(remoteUserId);
+}
+
+function sendVoiceSignal(targetUserId, payload) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        return;
+    }
+    socket.send(JSON.stringify({
+        type: 'voice_signal',
+        to_user_id: targetUserId,
+        signal: payload,
+    }));
+}
+
+async function createVoicePeerConnection(remoteUserId) {
+    if (voicePeerConnections.has(remoteUserId)) {
+        return voicePeerConnections.get(remoteUserId);
+    }
+    const pc = new RTCPeerConnection();
+    const localStream = await getLocalAudioStream();
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+    pc.ontrack = (event) => {
+        const remoteStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+        const audioEl = createRemoteAudioElement(remoteUserId);
+        if (audioEl) {
+            audioEl.srcObject = remoteStream;
+            audioEl.play().catch(() => {
+                // Autoplay may require a user gesture; voice call initiation is user triggered.
+            });
+        }
+    };
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            sendVoiceSignal(remoteUserId, {
+                signal_type: 'ice',
+                candidate: event.candidate,
+            });
+        }
+    };
+
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+            removeVoiceConnection(remoteUserId);
+        }
+    };
+
+    voicePeerConnections.set(remoteUserId, pc);
+    return pc;
+}
+
+async function maybeCreateOffer(remoteUserId) {
+    if (!voiceCallActive) {
+        return;
+    }
+    if (remoteUserId === Number(currentUserId)) {
+        return;
+    }
+    if (voicePeerConnections.has(remoteUserId)) {
+        return;
+    }
+    const pc = await createVoicePeerConnection(remoteUserId);
+    if (Number(currentUserId) < Number(remoteUserId)) {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        sendVoiceSignal(remoteUserId, {
+            signal_type: 'offer',
+            sdp: offer.sdp,
+            sdp_type: offer.type,
+        });
+    }
+}
+
+async function handleVoiceSignalEvent(fromUserId, signal) {
+    if (!voiceCallActive) {
+        return;
+    }
+    const remoteUserId = Number(fromUserId);
+    if (remoteUserId === Number(currentUserId)) {
+        return;
+    }
+
+    const pc = await createVoicePeerConnection(remoteUserId);
+    const signalType = signal.signal_type;
+
+    if (signalType === 'offer') {
+        const description = {
+            type: 'offer',
+            sdp: signal.sdp,
+        };
+        await pc.setRemoteDescription(description);
+        await flushIceCandidates(remoteUserId);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        sendVoiceSignal(remoteUserId, {
+            signal_type: 'answer',
+            sdp: answer.sdp,
+            sdp_type: answer.type,
+        });
+        return;
+    }
+
+    if (signalType === 'answer') {
+        const description = {
+            type: 'answer',
+            sdp: signal.sdp,
+        };
+        await pc.setRemoteDescription(description);
+        await flushIceCandidates(remoteUserId);
+        return;
+    }
+
+    if (signalType === 'ice' && signal.candidate) {
+        const candidate = signal.candidate;
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+            try {
+                await pc.addIceCandidate(candidate);
+            } catch (error) {
+                console.warn('Failed to add ICE candidate:', error);
+            }
+        } else {
+            queueIceCandidate(remoteUserId, candidate);
+        }
+    }
+}
+
+function setMicrophoneEnabled(enabled) {
+    microphoneEnabled = Boolean(enabled);
+    if (localVoiceStream) {
+        localVoiceStream.getAudioTracks().forEach((track) => {
+            track.enabled = microphoneEnabled;
+        });
+    }
+    updateVoiceUi();
+}
+
+async function startVoiceCall() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Your browser does not support voice chat.');
+        return;
+    }
+    try {
+        await getLocalAudioStream();
+    } catch (error) {
+        return;
+    }
+    voiceCallActive = true;
+    setMicrophoneEnabled(true);
+    updateVoiceUi();
+    const onlineRows = Array.from(document.querySelectorAll('.member-row[data-user-id][data-online="true"]'));
+    for (const row of onlineRows) {
+        const remoteId = Number(row.dataset.userId);
+        if (remoteId !== Number(currentUserId)) {
+            await maybeCreateOffer(remoteId);
+        }
+    }
+}
+
+function stopVoiceCall() {
+    voiceCallActive = false;
+    updateVoiceUi();
+    clearVoiceConnections();
+    if (localVoiceStream) {
+        localVoiceStream.getAudioTracks().forEach((track) => {
+            track.enabled = false;
+        });
+    }
+}
+
+function syncVoicePeersFromPresence(onlineMemberIds) {
+    if (!voiceCallActive) {
+        return;
+    }
+    const onlineSet = new Set((onlineMemberIds || []).map((id) => Number(id))); 
+    onlineSet.delete(Number(currentUserId));
+    onlineSet.forEach((remoteId) => {
+        if (!voicePeerConnections.has(remoteId)) {
+            maybeCreateOffer(remoteId).catch((err) => console.warn('Voice peer creation failed:', err));
+        }
+    });
+    Array.from(voicePeerConnections.keys()).forEach((remoteId) => {
+        if (!onlineSet.has(remoteId)) {
+            removeVoiceConnection(remoteId);
+        }
+    });
+}
+
+if (voiceCallBtn) {
+    voiceCallBtn.addEventListener('click', () => {
+        if (voiceCallActive) {
+            stopVoiceCall();
+        } else {
+            startVoiceCall();
+        }
+    });
+}
+
+if (muteBtn) {
+    muteBtn.addEventListener('click', () => {
+        setMicrophoneEnabled(!microphoneEnabled);
+    });
+}
 
 function getCsrfToken() {
     const field = document.querySelector('input[name="csrfmiddlewaretoken"]');
@@ -1223,9 +1539,11 @@ if (socket) {
         } else if (payload.type === 'presence') {
             updatePresence(payload.online_member_ids, payload.member_states || {});
             syncMemberStates(payload.member_states || {});
+            syncVoicePeersFromPresence(payload.online_member_ids);
         } else if (payload.type === 'state') {
             updatePresence(payload.online_member_ids || [], payload.member_states || {});
             syncMemberStates(payload.member_states || {});
+            syncVoicePeersFromPresence(payload.online_member_ids || []);
         } else if (payload.type === 'motion') {
             applyMemberState(payload.member);
         } else if (payload.type === 'blackboard_update') {
@@ -1242,6 +1560,13 @@ if (socket) {
                     })
                     .catch(err => console.error('Blackboard reload failed:', err));
             }
+        } else if (payload.type === 'voice_signal') {
+            if (payload.to_user_id !== Number(currentUserId)) {
+                return;
+            }
+            handleVoiceSignalEvent(payload.from_user_id, payload.signal).catch((err) => {
+                console.warn('Voice signal handling error:', err);
+            });
         } else if (payload.type === 'dm_received') {
             const msg = payload.message;
             const dmSlug = payload.dm_slug;
