@@ -877,14 +877,14 @@ function updateVoiceUi() {
 
     if (voiceCallActive) {
         voiceCallBtn.title = 'Stop voice call';
-        voiceCallBtn.querySelector('span').textContent = 'mic';
+        voiceCallBtn.querySelector('span').textContent = 'call_end';
         muteBtn.style.display = '';
         muteBtn.title = microphoneEnabled ? 'Mute microphone' : 'Unmute microphone';
         muteBtn.querySelector('span').textContent = microphoneEnabled ? 'mic' : 'mic_off';
         voiceStatusText.textContent = `Voice: ${microphoneEnabled ? 'On' : 'Muted'}`;
     } else {
         voiceCallBtn.title = 'Start voice call';
-        voiceCallBtn.querySelector('span').textContent = 'mic';
+        voiceCallBtn.querySelector('span').textContent = 'call';
         muteBtn.style.display = 'none';
         voiceStatusText.textContent = 'Voice: Off';
     }
