@@ -50,6 +50,7 @@ const dmOverlayClose = document.getElementById('dm-overlay-close');
 const dmSockets = new Map();    // slug → WebSocket
 const dmPartnerIds = new Map(); // slug → partnerId
 const unreadCounts = new Map(); // partnerId → count
+const processedDmMessageIds = new Set(); // message ID → true
 let currentDmSlug = null;       // slug of the currently-open overlay (null = closed)
 
 function ensureAvatarElement(userId, username) {
@@ -958,9 +959,52 @@ function connectDmBackground(dmSlug, partnerId, partnerUsername) {
 
         if (msg.sender_id === currentUserId) return;
 
+        if (msg.id) {
+            if (processedDmMessageIds.has(msg.id)) return;
+            processedDmMessageIds.add(msg.id);
+        }
+
         const count = (unreadCounts.get(partnerId) || 0) + 1;
         unreadCounts.set(partnerId, count);
         showUnreadBadge(partnerId, count);
+        showToastNotification(msg.sender);
+    });
+}
+
+function showToastNotification(username) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast-message';
+    
+    const text = document.createElement('span');
+    text.textContent = `${username} poked you`;
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'close-btn';
+    closeBtn.innerHTML = '&times;';
+    
+    toast.appendChild(text);
+    toast.appendChild(closeBtn);
+    container.appendChild(toast);
+    
+    const timeoutId = setTimeout(() => {
+        if (toast.parentElement) {
+            toast.classList.add('closing');
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 5000);
+    
+    closeBtn.addEventListener('click', () => {
+        clearTimeout(timeoutId);
+        toast.classList.add('closing');
+        setTimeout(() => toast.remove(), 300);
     });
 }
 
@@ -1197,6 +1241,30 @@ if (socket) {
                         }
                     })
                     .catch(err => console.error('Blackboard reload failed:', err));
+            }
+        } else if (payload.type === 'dm_received') {
+            const msg = payload.message;
+            const dmSlug = payload.dm_slug;
+            const partnerId = payload.partner_id;
+            const partnerUsername = payload.partner_username;
+
+            if (currentDmSlug === dmSlug && dmOverlay && dmOverlay.classList.contains('is-open')) {
+                appendDmMessage(msg);
+                return;
+            }
+
+            if (msg.id) {
+                if (processedDmMessageIds.has(msg.id)) return;
+                processedDmMessageIds.add(msg.id);
+            }
+
+            const count = (unreadCounts.get(partnerId) || 0) + 1;
+            unreadCounts.set(partnerId, count);
+            showUnreadBadge(partnerId, count);
+            showToastNotification(msg.sender);
+
+            if (!document.querySelector(`a.group-link[data-dm-slug="${dmSlug}"]`)) {
+                connectDmBackground(dmSlug, partnerId, partnerUsername);
             }
         }
     });

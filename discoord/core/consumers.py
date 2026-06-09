@@ -28,6 +28,10 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
 
         self.room_group_name = f'chat_{self.chat_group.slug}'
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        
+        self.user_group_name = f'user_{self.user.id}'
+        await self.channel_layer.group_add(self.user_group_name, self.channel_name)
+        
         await self.accept()
 
         await self.set_online()
@@ -39,6 +43,8 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             await self.set_offline()
             await self.broadcast_presence()
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        if hasattr(self, 'user_group_name'):
+            await self.channel_layer.group_discard(self.user_group_name, self.channel_name)
 
     async def receive_json(self, content, **kwargs):
         message_type = content.get('type')
@@ -120,6 +126,14 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
             payload['html'] = event['html']
         await self.send_json(payload)
 
+    async def dm_received(self, event):
+        await self.send_json({
+            'type': 'dm_received',
+            'message': event['message'],
+            'dm_slug': event['dm_slug'],
+            'partner_id': event['partner_id'],
+            'partner_username': event['partner_username'],
+        })
 
     async def set_online(self):
         await database_sync_to_async(mark_member_online)(self.chat_group.slug, self.user)

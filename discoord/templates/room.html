@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/room.css' %}">
+<link rel="stylesheet" href="{% static 'css/room.css' %}?v=6">
 {% endblock %}
 
 {% block content %}
@@ -397,6 +397,6 @@
     const roomStateUrl = {% if active_group %}'{% url 'room_state' active_group.slug %}'{% else %}null{% endif %};
     const currentUserId = {{ request.user.id }};
 </script>
-<script src="{% static 'js/room.js' %}?v=4"></script>
-<script src="{% static 'js/proximity.js' %}?v=4"></script>
+<script src="{% static 'js/room.js' %}?v=5"></script>
+<script src="{% static 'js/proximity.js' %}?v=5"></script>
 {% endblock %}

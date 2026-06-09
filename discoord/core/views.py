@@ -345,6 +345,22 @@ def send_message_view(request, slug):
         },
     )
 
+    if group.is_dm:
+        other_member = group.members.exclude(id=request.user.id).first()
+        if other_member:
+            dm_payload = payload.copy()
+            dm_payload['is_me'] = False
+            async_to_sync(channel_layer.group_send)(
+                f'user_{other_member.id}',
+                {
+                    'type': 'dm.received',
+                    'message': dm_payload,
+                    'dm_slug': group.slug,
+                    'partner_id': request.user.id,
+                    'partner_username': request.user.username,
+                },
+            )
+
     return JsonResponse({'ok': True, 'message': payload})
 
 
